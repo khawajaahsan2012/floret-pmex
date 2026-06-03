@@ -610,7 +610,7 @@ function analyze(d){
   else if(!trendUp && r>30){bias='Bearish';cls='bear';}
   if(r>=70){bias='Overbought';cls='neut';}
   if(r<=30){bias='Oversold';cls='watch';}
-  return {price,prev,chg,s20,s50,rsi:r,support:lv.support,resistance:lv.resistance,trendUp};
+  return {price,prev,chg,s20,s50,rsi:r,support:lv.support,resistance:lv.resistance,trendUp,closes};
 }
 // turn analysis into expert commentary (rule engine, no LLM)
 function commentary(name,a){
@@ -883,11 +883,13 @@ function aCardFX(name,ticker,a,band,color){
     <div class="lvl-row">${lvls.map(l=>`<div class="lv"><div class="lv-l">${l[0]}</div><div class="lv-v ${l[1]}">${l[2]}</div></div>`).join('')}</div></div></div>`;
 }
 function aChart(a,color){
-  let path;
-  if(a&&a.closes){const c=a.closes.slice(-40);const mn=Math.min(...c),mx=Math.max(...c),rg=(mx-mn)||1;
-    path='M'+c.map((v,i)=>`${(i/(c.length-1)*290).toFixed(1)},${(46-((v-mn)/rg)*40).toFixed(1)}`).join(' L');}
-  else path='M0,30 L290,20';
-  const up=a?a.chg>=0:true; const lastY=a?(46-((a.closes[a.closes.length-1]-Math.min(...a.closes.slice(-40)))/((Math.max(...a.closes.slice(-40))-Math.min(...a.closes.slice(-40)))||1))*40):20;
+  const hasC=a&&a.closes&&a.closes.length>1;
+  let path,lastY=20;
+  if(hasC){
+    const c=a.closes.slice(-40);const mn=Math.min(...c),mx=Math.max(...c),rg=(mx-mn)||1;
+    path='M'+c.map((v,i)=>`${(i/(c.length-1)*290).toFixed(1)},${(46-((v-mn)/rg)*40).toFixed(1)}`).join(' L');
+    lastY=46-((c[c.length-1]-mn)/rg)*40;
+  } else { path='M0,30 L290,20'; }
   return `<svg class="a-chart" viewBox="0 0 290 50" preserveAspectRatio="none"><line x1="0" y1="12" x2="290" y2="12" stroke="#F3F4F6"/><line x1="0" y1="25" x2="290" y2="25" stroke="#F3F4F6"/><line x1="0" y1="38" x2="290" y2="38" stroke="#F3F4F6"/>
     <path d="${path} L290,50 L0,50Z" fill="${color}" opacity=".12"/><path d="${path}" stroke="${color}" stroke-width="1.8" fill="none"/><circle cx="290" cy="${lastY.toFixed(1)}" r="3" fill="${color}"/></svg>`;
 }
