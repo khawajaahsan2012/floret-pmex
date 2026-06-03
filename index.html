@@ -810,13 +810,18 @@ function buildNewsletter(live,calEvents){
     </div>`;
     html+=sectionHead('Contract Specs','PMEX Contract Specifications',dataNote);
     html+=buildSpecs(C,A);
-    html+=sectionHead('Market Hours','Exchange Trading Hours','PKT (UTC+5)');
+    html+=sectionHead('Sessions','Global Trading Sessions','All times PKT (UTC+5)');
+    // current PKT hour to flag the active session(s)
+    const hStr=new Date().toLocaleString('en-US',{timeZone:'Asia/Karachi',hour12:false,hour:'2-digit'});
+    const hNow=parseInt(hStr,10)%24;
+    const inRange=(s,e)=> s<e ? (hNow>=s&&hNow<e) : (hNow>=s||hNow<e);
     html+=`<div class="hours-grid">
-      ${hours('PMEX · Pakistan','04:00 AM – 02:00 AM','Mon–Fri (22 hrs)',true)}
-      ${hours('COMEX · New York','18:00 – 01:15','(13:00–20:15 EST)',true)}
-      ${hours('NYMEX · New York','18:00 – 01:15','Crude & Gas',true)}
-      ${hours('PSX · Karachi','09:30 – 15:30','Mon–Fri',false)}
+      ${hours('Sydney Session','02:00 AM – 11:00 AM','AUD · NZD focus',inRange(2,11))}
+      ${hours('Tokyo Session · Asian','05:00 AM – 02:00 PM','JPY · Gold active',inRange(5,14))}
+      ${hours('London Session · European','01:00 PM – 10:00 PM','EUR · GBP · high activity',inRange(13,22))}
+      ${hours('New York Session · US','06:00 PM – 03:00 AM','USD · Oil · Gold · peak liquidity',inRange(18,3))}
     </div>`;
+    html+=`<div class="disclaimer" style="margin-top:-12px;"><strong>Highest volatility:</strong> the <strong>London–New York overlap (06:00 PM – 10:00 PM PKT)</strong> sees the heaviest volume in gold, oil and major FX pairs — the prime window for PMEX traders. PMEX itself trades 04:00 AM – 02:00 AM PKT, covering all four sessions.</div>`;
   }
 
   html+=`<div class="disclaimer"><strong>Risk Disclaimer:</strong> Trading commodities on PMEX involves significant risk of loss; leverage magnifies gains and losses. Live prices via public market feeds (indicative, may be delayed). Margins from ${fileLoaded?'the uploaded PMEX margin file':'Margins-01-06-2026.xlsx'}; PMEX-listed prices are denominated and settled per exchange contract specs. Technical signals are rule-based and not investment advice. Floret Capitals is SECP-licensed. Past performance is not indicative of future results.</div></div>`;
@@ -912,7 +917,7 @@ function biasDonut(name,sub,a){
 }
 function risk(l,val,color,fill,w,desc){return `<div class="risk-card"><div class="risk-header"><div class="risk-label">${l}</div><div class="risk-val" style="color:${color};">${val}</div></div><div class="risk-bar-track"><div class="risk-bar-fill ${fill}" style="width:${w}%;"></div></div><div class="risk-desc">${desc}</div></div>`;}
 function riskText(l,val,color,fill,w,desc){return `<div class="risk-card"><div class="risk-header"><div class="risk-label">${l}</div><div class="risk-val" style="color:${color};font-size:13px;font-weight:700;">${val}</div></div><div class="risk-bar-track"><div class="risk-bar-fill ${fill}" style="width:${w}%;"></div></div><div class="risk-desc">${desc}</div></div>`;}
-function hours(name,time,sub,open){return `<div class="hours-card"><div class="hours-name">${name}</div><div class="hours-time">${time}</div><div class="hours-pkt">${sub}</div><span class="hours-status ${open?'open':'closed'}">● ${open?'Open':'Closed'}</span></div>`;}
+function hours(name,time,sub,open){return `<div class="hours-card"><div class="hours-name">${name}</div><div class="hours-time">${time}</div><div class="hours-pkt">${sub}</div><span class="hours-status ${open?'open':'closed'}">● ${open?'Active Now':'Closed'}</span></div>`;}
 function heroChart(){return `<svg viewBox="0 0 235 155" style="width:100%;height:100%;"><line x1="0" y1="35" x2="235" y2="35" stroke="rgba(227,158,61,.09)"/><line x1="0" y1="70" x2="235" y2="70" stroke="rgba(227,158,61,.09)"/><line x1="0" y1="105" x2="235" y2="105" stroke="rgba(227,158,61,.09)"/>
   <path d="M0,108 L34,104 L68,81 L102,70 L136,58 L170,55 L204,34 L235,21 L235,140 L0,140Z" fill="#E39E3D" opacity=".25"/><path d="M0,108 L34,104 L68,81 L102,70 L136,58 L170,55 L204,34 L235,21" stroke="#E39E3D" stroke-width="2" fill="none"/>
   <path d="M0,40 L34,40 L68,54 L102,58 L136,60 L170,66 L204,79 L235,87" stroke="#CC1818" stroke-width="1.5" fill="none" stroke-dasharray="5,3"/>
