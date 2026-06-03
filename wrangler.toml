@@ -1,6 +1,0 @@
-name = "floret-pmex"
-main = "worker.js"
-compatibility_date = "2024-11-06"
-
-# Everything (the web page + the /api routes) is handled inside worker.js.
-# No [assets] block needed — this avoids the routing that kept breaking on redeploys.
