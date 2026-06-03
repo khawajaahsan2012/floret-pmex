@@ -2,8 +2,5 @@ name = "floret-pmex"
 main = "worker.js"
 compatibility_date = "2024-11-06"
 
-# Serve the static files (index.html, etc.) from the repo root,
-# and let worker.js handle the /api/* routes.
-[assets]
-directory = "."
-binding = "ASSETS"
+# Everything (the web page + the /api routes) is handled inside worker.js.
+# No [assets] block needed — this avoids the routing that kept breaking on redeploys.
