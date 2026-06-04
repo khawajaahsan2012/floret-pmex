@@ -1,5 +1,11 @@
 {
   "name": "floret-pmex",
   "main": "worker.js",
-  "compatibility_date": "2024-11-06"
+  "compatibility_date": "2024-11-06",
+  "kv_namespaces": [
+    { "binding": "CAL_KV", "id": "8aebe9a0ca5145a9add343d119915e1e" }
+  ],
+  "triggers": {
+    "crons": ["0 */3 * * *"]
+  }
 }

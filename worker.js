@@ -1,9 +1,14 @@
 /**
  * Floret Capitals — PMEX Newsletter (single self-contained Worker)
- *   /api/prices?symbols=...  → live prices (Yahoo, concurrency-limited + edge-cached)
- *   /api/calendar            → high-impact + key commodity releases
- *                              (edge-cached 6h, retries, + 24h stale-while-error fallback)
- *   everything else          → the web app (HTML embedded as base64)
+ *
+ *   /api/prices    → live prices (Yahoo, concurrency-limited + edge-cached)
+ *   /api/calendar  → reads from Workers KV (refreshed by cron every 3h).
+ *                    Resilience: KV → live fetch → embedded snapshot.
+ *   else           → the web app (HTML embedded as base64)
+ *
+ *   scheduled()    → cron handler: refreshes the calendar in KV when the feed
+ *                    is reachable, so /api/calendar never has to hit the
+ *                    (rate-limited) feed in the request path.
  */
 
 const CORS = {
@@ -14,6 +19,47 @@ const CORS = {
 };
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+const KW = ["crude oil inventories", "natural gas storage", "opec", "eia petroleum"];
+
+// built-in snapshot of the current week (cold-start last resort)
+const FALLBACK_CAL = [{"title":"ISM Manufacturing PMI","country":"USD","date":"2026-06-01T10:00:00-04:00","forecast":"53.3","previous":"52.7"},{"title":"BOE Gov Bailey Speaks","country":"GBP","date":"2026-06-02T10:00:00-04:00","forecast":"","previous":""},{"title":"GDP q/q","country":"AUD","date":"2026-06-02T21:30:00-04:00","forecast":"0.5%","previous":"0.8%"},{"title":"BOJ Gov Ueda Speaks","country":"JPY","date":"2026-06-03T04:30:00-04:00","forecast":"","previous":""},{"title":"ADP Non-Farm Employment Change","country":"USD","date":"2026-06-03T08:15:00-04:00","forecast":"118K","previous":"109K"},{"title":"ISM Services PMI","country":"USD","date":"2026-06-03T10:00:00-04:00","forecast":"53.7","previous":"53.6"},{"title":"Crude Oil Inventories","country":"USD","date":"2026-06-03T10:30:00-04:00","forecast":"-2.9M","previous":"-3.3M"},{"title":"RBA Gov Bullock Speaks","country":"AUD","date":"2026-06-04T01:00:00-04:00","forecast":"","previous":""},{"title":"Natural Gas Storage","country":"USD","date":"2026-06-04T10:30:00-04:00","forecast":"99B","previous":"92B"},{"title":"BOE Gov Bailey Speaks","country":"GBP","date":"2026-06-04T11:40:00-04:00","forecast":"","previous":""},{"title":"Employment Change","country":"CAD","date":"2026-06-05T08:30:00-04:00","forecast":"10.1K","previous":"-17.7K"},{"title":"Unemployment Rate","country":"CAD","date":"2026-06-05T08:30:00-04:00","forecast":"6.9%","previous":"6.9%"},{"title":"Average Hourly Earnings m/m","country":"USD","date":"2026-06-05T08:30:00-04:00","forecast":"0.3%","previous":"0.2%"},{"title":"Non-Farm Employment Change","country":"USD","date":"2026-06-05T08:30:00-04:00","forecast":"85K","previous":"115K"},{"title":"Unemployment Rate","country":"USD","date":"2026-06-05T08:30:00-04:00","forecast":"4.3%","previous":"4.3%"}];
+
+const buildCal = (all) => (Array.isArray(all) ? all : [])
+  .filter(e => {
+    const imp = (e.impact || "").toLowerCase();
+    const t = (e.title || "").toLowerCase();
+    return imp === "high" || KW.some(k => t.includes(k));
+  })
+  .map(e => ({ title: e.title || "", country: e.country || "", date: e.date || "", forecast: e.forecast || "", previous: e.previous || "" }));
+
+// fetch the feed (with retries); returns events array or null
+async function fetchCalFeed(range) {
+  const feed = `https://nfs.faireconomy.media/ff_calendar_${range}.json`;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    try {
+      const r = await fetch(feed, {
+        headers: { "User-Agent": UA, "Accept": "application/json" },
+        signal: AbortSignal.timeout(12000),
+        cf: { cacheTtl: 21600, cacheEverything: true },
+      });
+      if (r.status === 429) { await sleep(800 + attempt * 800); continue; }
+      if (!r.ok) return null;
+      return buildCal(await r.json());
+    } catch (e) { if (attempt === 5) return null; }
+  }
+  return null;
+}
+
+// refresh KV for both ranges (called by cron + lazily)
+async function refreshKV(env) {
+  if (!env || !env.CAL_KV) return;
+  for (const range of ["thisweek", "nextweek"]) {
+    const events = await fetchCalFeed(range);
+    if (events && events.length) {
+      await env.CAL_KV.put("cal-" + range, JSON.stringify({ events, ts: Date.now() }));
+    }
+  }
+}
 
 async function mapLimit(items, limit, fn) {
   const ret = []; let i = 0;
@@ -65,46 +111,33 @@ async function handlePrices(request) {
   return new Response(JSON.stringify({ ok: true, ts: Date.now(), data: out }), { headers: CORS });
 }
 
-async function handleCalendar(request) {
+async function handleCalendar(request, env, ctx) {
   if (request.method === "OPTIONS") return new Response(null, { headers: CORS });
   const url = new URL(request.url);
   const range = url.searchParams.get("range") === "nextweek" ? "nextweek" : "thisweek";
-  const feed = `https://nfs.faireconomy.media/ff_calendar_${range}.json`;
-  const KW = ["crude oil inventories", "natural gas storage", "opec", "eia petroleum"];
-  const cache = caches.default;
-  const ckey = new Request("https://floret.cache/cal-" + range, { method: "GET" });
 
-  const build = (all) => (Array.isArray(all) ? all : [])
-    .filter(e => {
-      const imp = (e.impact || "").toLowerCase();
-      const t = (e.title || "").toLowerCase();
-      return imp === "high" || KW.some(k => t.includes(k));
-    })
-    .map(e => ({ title: e.title || "", country: e.country || "", date: e.date || "", forecast: e.forecast || "", previous: e.previous || "" }));
+  // 1) Workers KV (instant, never rate-limited) — kept fresh by cron
+  if (env && env.CAL_KV) {
+    const raw = await env.CAL_KV.get("cal-" + range);
+    if (raw) {
+      const j = JSON.parse(raw);
+      if (j.events && j.events.length) {
+        // if data is older than 6h, refresh in the background (non-blocking)
+        if (ctx && (Date.now() - (j.ts || 0)) > 6 * 3600 * 1000) ctx.waitUntil(refreshKV(env));
+        return new Response(JSON.stringify({ ok: true, range, events: j.events, source: "kv" }), { headers: CORS });
+      }
+    }
+  }
 
-  for (let attempt = 0; attempt < 6; attempt++) {
-    try {
-      const r = await fetch(feed, {
-        headers: { "User-Agent": UA, "Accept": "application/json" },
-        signal: AbortSignal.timeout(12000),
-        cf: { cacheTtl: 21600, cacheEverything: true }, // 6h edge cache
-      });
-      if (r.status === 429) { await sleep(800 + attempt * 800); continue; }
-      if (!r.ok) break;
-      const all = await r.json();
-      const events = build(all);
-      const body = JSON.stringify({ ok: true, range, events });
-      // store a 24h stale copy to serve if the feed later blocks us
-      await cache.put(ckey, new Response(body, { headers: { "Content-Type": "application/json", "Cache-Control": "max-age=86400" } }));
-      return new Response(body, { headers: CORS });
-    } catch (e) { if (attempt === 5) break; }
+  // 2) live fetch (and seed KV) on a cold KV
+  const events = await fetchCalFeed(range);
+  if (events && events.length) {
+    if (env && env.CAL_KV) ctx && ctx.waitUntil(env.CAL_KV.put("cal-" + range, JSON.stringify({ events, ts: Date.now() })));
+    return new Response(JSON.stringify({ ok: true, range, events, source: "live" }), { headers: CORS });
   }
-  // feed unavailable → serve last good copy (stale) if we have one
-  const stale = await cache.match(ckey);
-  if (stale) {
-    const j = await stale.json();
-    return new Response(JSON.stringify({ ok: true, range, events: j.events || [], stale: true }), { headers: CORS });
-  }
+
+  // 3) embedded snapshot (this week)
+  if (range === "thisweek") return new Response(JSON.stringify({ ok: true, range, events: FALLBACK_CAL, fallback: true }), { headers: CORS });
   return new Response(JSON.stringify({ ok: false, error: "feed unavailable", events: [] }), { headers: CORS });
 }
 
@@ -116,10 +149,13 @@ function pageHTML() {
 }
 
 export default {
-  async fetch(request) {
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(refreshKV(env));
+  },
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (url.pathname === "/api/prices") return handlePrices(request);
-    if (url.pathname === "/api/calendar") return handleCalendar(request);
+    if (url.pathname === "/api/calendar") return handleCalendar(request, env, ctx);
     return new Response(pageHTML(), { headers: { "content-type": "text/html; charset=utf-8" } });
   },
 };
