@@ -108,13 +108,40 @@ st.markdown("""
     /* Divider */
     hr { border-color: #E5E7EB !important; margin: 16px 0 !important; }
 
-    /* File uploader — clean minimal style */
+    /* File uploader */
     [data-testid="stFileUploader"] {
         background: #FAFAFA !important;
         border: 1.5px dashed #D1D5DB !important;
         border-radius: 8px !important;
     }
     [data-testid="stFileUploadDropzone"] { background: transparent !important; }
+    /* Make all text in the button transparent so nothing shows — then inject via ::after */
+    [data-testid="stFileUploadDropzone"] button {
+        color: transparent !important;
+        background: #1A1A2E !important;
+        border: 1px solid #E39E3D !important;
+        border-radius: 6px !important;
+        position: relative !important;
+        min-width: 130px !important;
+        height: 36px !important;
+    }
+    [data-testid="stFileUploadDropzone"] button * {
+        color: transparent !important;
+        visibility: hidden !important;
+    }
+    [data-testid="stFileUploadDropzone"] button::after {
+        content: "📂  Browse File";
+        color: #E39E3D !important;
+        font-size: 13px !important;
+        font-family: 'Karla', sans-serif !important;
+        font-weight: 600 !important;
+        position: absolute !important;
+        top: 50% !important;
+        left: 50% !important;
+        transform: translate(-50%, -50%) !important;
+        white-space: nowrap !important;
+        visibility: visible !important;
+    }
 
     /* Hide Streamlit chrome */
     #MainMenu, footer, header { visibility: hidden; }
