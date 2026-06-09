@@ -641,24 +641,20 @@ with col_left:
 
     aed_pkr = round(usd_pkr / 3.6725, 2)
 
-    if edition_type == "Weekly":
-        st.markdown("---")
-        st.markdown("""
-        <div class="fc-form-panel" style="margin-bottom:8px;">
-          <div class="fc-form-panel-title"><span class="dot"></span> Central Bank Rates</div>
-        </div>
-        """, unsafe_allow_html=True)
-        st.markdown('<span class="fc-section-label">Current policy rates</span>', unsafe_allow_html=True)
-        c1, c2 = st.columns(2)
-        with c1:
-            fed_rate = st.number_input("FED (%)", value=4.50, step=0.25, format="%.2f")
-            boj_rate = st.number_input("BOJ (%)", value=0.75, step=0.25, format="%.2f")
-        with c2:
-            ecb_rate = st.number_input("ECB (%)", value=2.00, step=0.25, format="%.2f")
-            sbp_rate = st.number_input("SBP (%)", value=12.0, step=0.25, format="%.2f")
-
-    else:
-        fed_rate, ecb_rate, boj_rate, sbp_rate = 4.50, 2.00, 0.75, 12.0
+    st.markdown("---")
+    st.markdown("""
+    <div class="fc-form-panel" style="margin-bottom:8px;">
+      <div class="fc-form-panel-title"><span class="dot"></span> Central Bank Rates</div>
+    </div>
+    """, unsafe_allow_html=True)
+    st.markdown('<span class="fc-section-label">Current policy rates</span>', unsafe_allow_html=True)
+    c1, c2 = st.columns(2)
+    with c1:
+        fed_rate = st.number_input("FED (%)", value=4.50, step=0.25, format="%.2f")
+        boj_rate = st.number_input("BOJ (%)", value=0.75, step=0.25, format="%.2f")
+    with c2:
+        ecb_rate = st.number_input("ECB (%)", value=2.00, step=0.25, format="%.2f")
+        sbp_rate = st.number_input("SBP (%)", value=12.0, step=0.25, format="%.2f")
 
     st.markdown("---")
 
@@ -677,7 +673,7 @@ with col_left:
     st.markdown("""
     <div class="fc-contact-bar">
       <span>📞 <strong>+92 311 1000183</strong></span>
-      <span>contact@floretcapitals.com</span>
+      <span>info@floretcapitals.com</span>
     </div>
     """, unsafe_allow_html=True)
 
@@ -1644,7 +1640,7 @@ body{{background:#F0F2F5;font-family:var(--body);color:var(--text);width:794px;m
     </div>
     <div class="footer-contact">
       <strong>+92 311 1000183</strong><br/>
-      contact@floretcapitals.com · floretcapitals.com<br/>
+      info@floretcapitals.com · floretcapitals.com<br/>
       Blue Area, Islamabad · M.M Alam Road, Lahore
     </div>
   </div>
