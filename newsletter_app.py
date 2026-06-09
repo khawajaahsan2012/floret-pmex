@@ -1654,49 +1654,25 @@ body{{background:#F0F2F5;font-family:var(--body);color:var(--text);width:794px;m
         # Pure HTML download — bypasses Safari's Streamlit button rendering bugs
         b64 = base64.b64encode(html.encode()).decode()
         st.markdown(f"""
-        <a href="data:text/html;base64,{b64}" download="{fname}" style="
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            background: linear-gradient(135deg, #1A1A2E 0%, #252540 100%);
-            border: 1px solid rgba(227,158,61,.4);
-            border-left: 4px solid #E39E3D;
-            border-radius: 10px;
-            padding: 14px 20px;
-            margin: 8px 0 16px;
-            text-decoration: none !important;
-            box-shadow: 0 4px 16px rgba(0,0,0,.2);
-            cursor: pointer;
-        ">
-          <div style="
-              width: 38px; height: 38px; flex-shrink: 0;
-              background: linear-gradient(135deg, #E39E3D, #F5B855);
+        <div style="margin: 8px 0 20px;">
+          <a href="data:text/html;base64,{b64}" download="{fname}" style="
+              display: block;
+              background: #E39E3D;
+              color: #1A1A2E !important;
+              text-align: center;
+              padding: 14px 24px;
               border-radius: 8px;
-              display: flex; align-items: center; justify-content: center;
-              font-size: 18px;
-          ">⬇</div>
-          <div style="flex: 1;">
-            <div style="font-family:'Rubik',sans-serif; font-size:13px; font-weight:700;
-                        color:#FFFFFF; letter-spacing:.02em;">
-              Download {brief_type} Newsletter
-            </div>
-            <div style="font-size:10px; color:rgba(255,255,255,.4); margin-top:2px; font-family:'DM Mono',monospace;">
-              {fname} &nbsp;·&nbsp; HTML → open in Chrome → Save as PDF
-            </div>
-          </div>
-          <div style="
-              background: linear-gradient(135deg, #E39E3D, #F5B855);
-              color: #1A1A2E;
               font-family: 'Rubik', sans-serif;
-              font-size: 11px;
-              font-weight: 800;
-              letter-spacing: .08em;
-              text-transform: uppercase;
-              padding: 7px 16px;
-              border-radius: 6px;
-              white-space: nowrap;
-          ">Save File</div>
-        </a>
+              font-size: 14px;
+              font-weight: 700;
+              letter-spacing: .04em;
+              text-decoration: none !important;
+              box-shadow: 0 2px 12px rgba(227,158,61,.35);
+          ">⬇&nbsp; Download {brief_type} Newsletter</a>
+          <div style="text-align:center; margin-top:8px; font-size:11px; color:#9CA3AF;">
+            HTML file · Open in Chrome → <strong style="color:#6B7280;">Ctrl+P</strong> → Save as PDF
+          </div>
+        </div>
         """, unsafe_allow_html=True)
 
         st.markdown("---")
