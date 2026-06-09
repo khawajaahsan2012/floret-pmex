@@ -117,21 +117,27 @@ st.markdown("""
     }
     [data-testid="stFileUploader"] section { padding: 0 !important; }
     [data-testid="stFileUploadDropzone"] { background: transparent !important; }
-    /* Fix doubled button text */
+    /* Fix doubled button text — zero out original text, inject via ::after */
     [data-testid="stFileUploadDropzone"] button {
         background: #1A1A2E !important;
-        color: #E39E3D !important;
         border: 1px solid #E39E3D !important;
         border-radius: 6px !important;
+        padding: 6px 18px !important;
+        font-size: 0 !important;
+        line-height: 1 !important;
+        min-width: 120px !important;
+    }
+    [data-testid="stFileUploadDropzone"] button * {
+        font-size: 0 !important;
+        display: none !important;
+    }
+    [data-testid="stFileUploadDropzone"] button::after {
+        content: "📂  Browse File" !important;
+        font-size: 13px !important;
         font-family: 'Karla', sans-serif !important;
         font-weight: 600 !important;
-        font-size: 13px !important;
-        padding: 6px 16px !important;
-    }
-    [data-testid="stFileUploadDropzone"] button span { display: none !important; }
-    [data-testid="stFileUploadDropzone"] button::after {
-        content: "Browse File" !important;
         color: #E39E3D !important;
+        display: inline !important;
     }
     [data-testid="stFileUploadDropzone"] small {
         color: #9CA3AF !important;
