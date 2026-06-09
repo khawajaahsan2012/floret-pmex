@@ -108,6 +108,36 @@ st.markdown("""
     /* Divider */
     hr { border-color: #E5E7EB !important; margin: 16px 0 !important; }
 
+    /* File uploader */
+    [data-testid="stFileUploader"] {
+        background: #FAFAFA !important;
+        border: 1.5px dashed #DADBDD !important;
+        border-radius: 8px !important;
+        padding: 12px !important;
+    }
+    [data-testid="stFileUploader"] section { padding: 0 !important; }
+    [data-testid="stFileUploadDropzone"] { background: transparent !important; }
+    /* Fix doubled button text */
+    [data-testid="stFileUploadDropzone"] button {
+        background: #1A1A2E !important;
+        color: #E39E3D !important;
+        border: 1px solid #E39E3D !important;
+        border-radius: 6px !important;
+        font-family: 'Karla', sans-serif !important;
+        font-weight: 600 !important;
+        font-size: 13px !important;
+        padding: 6px 16px !important;
+    }
+    [data-testid="stFileUploadDropzone"] button span { display: none !important; }
+    [data-testid="stFileUploadDropzone"] button::after {
+        content: "Browse File" !important;
+        color: #E39E3D !important;
+    }
+    [data-testid="stFileUploadDropzone"] small {
+        color: #9CA3AF !important;
+        font-size: 11px !important;
+    }
+
     /* Hide Streamlit chrome */
     #MainMenu, footer, header { visibility: hidden; }
     [data-testid="stToolbar"] { display: none; }
