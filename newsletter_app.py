@@ -15,59 +15,85 @@ warnings.filterwarnings("ignore")
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Floret Capitals — Newsletter Generator",
-    page_icon="🏛️",
+    page_title="Floret Capitals — PMEX Newsletter Generator",
+    page_icon="https://floretcapitals.com/wp-content/uploads/2024/10/cropped-Floret-Icon-150x150.png",
     layout="wide",
 )
 
 # ── Styling ───────────────────────────────────────────────────────────────────
 st.markdown("""
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&family=Karla:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <style>
-    /* Force light theme throughout */
-    html, body, [data-testid="stAppViewContainer"], [data-testid="stApp"],
-    [data-testid="stSidebar"], section[data-testid="stSidebar"] {
+    /* Base font */
+    html, body, [class*="css"] {
+        font-family: 'Karla', sans-serif !important;
+    }
+
+    /* Force light theme */
+    html, body,
+    [data-testid="stAppViewContainer"],
+    [data-testid="stApp"],
+    [data-testid="stMain"],
+    [data-testid="block-container"] {
         background-color: #F0F2F5 !important;
         color: #111827 !important;
     }
-    [data-testid="stMain"] { background-color: #F0F2F5 !important; }
-    [data-testid="block-container"] { background-color: #F0F2F5 !important; }
 
-    /* All text black */
-    p, span, label, div, h1, h2, h3, li {
+    /* All text */
+    p, span, label, div, h1, h2, h3, h4, li, a {
         color: #111827 !important;
+        font-family: 'Karla', sans-serif !important;
     }
 
     /* Inputs */
     [data-testid="stNumberInput"] input,
     [data-testid="stDateInput"] input,
     input[type="number"], input[type="text"] {
-        background-color: #FFFFFF !important;
+        background-color: #FAFAFA !important;
         color: #111827 !important;
-        border: 1px solid #D1D5DB !important;
-        border-radius: 6px !important;
+        border: 1px solid #DADBDD !important;
+        border-radius: 7px !important;
+        font-family: 'DM Mono', monospace !important;
+        font-size: 14px !important;
     }
 
-    /* Radio buttons */
-    [data-testid="stRadio"] label { color: #111827 !important; }
-    [data-testid="stRadio"] > div { color: #111827 !important; }
+    /* Labels */
+    [data-testid="stRadio"] label,
+    [data-testid="stRadio"] > div,
+    [data-testid="stDateInput"] label,
+    [data-testid="stNumberInput"] label { color: #374151 !important; font-weight: 600 !important; }
 
-    /* Buttons */
+    /* Radio */
+    [data-testid="stRadio"] > div > label > div:first-child > div {
+        border-color: #E39E3D !important;
+    }
+
+    /* Primary button */
     [data-testid="stButton"] > button {
-        background-color: #E39E3D !important;
+        background: linear-gradient(135deg, #E39E3D, #F5B855) !important;
         color: #1A1A2E !important;
         font-weight: 700 !important;
+        font-family: 'Rubik', sans-serif !important;
+        font-size: 14px !important;
+        letter-spacing: .05em !important;
         border: none !important;
         border-radius: 6px !important;
+        padding: 12px 24px !important;
+        box-shadow: 0 2px 8px rgba(227,158,61,.35) !important;
     }
     [data-testid="stButton"] > button:hover {
-        background-color: #F5B855 !important;
+        background: linear-gradient(135deg, #F5B855, #E39E3D) !important;
+        box-shadow: 0 4px 16px rgba(227,158,61,.5) !important;
     }
 
     /* Download button */
     [data-testid="stDownloadButton"] > button {
-        background-color: #1A1A2E !important;
+        background: #1A1A2E !important;
         color: #E39E3D !important;
         font-weight: 700 !important;
+        font-family: 'Rubik', sans-serif !important;
         border: 1px solid #E39E3D !important;
         border-radius: 6px !important;
     }
@@ -79,65 +105,193 @@ st.markdown("""
         border-radius: 6px !important;
     }
 
-    /* Spinner */
-    [data-testid="stSpinner"] { color: #E39E3D !important; }
+    /* Divider */
+    hr { border-color: #E5E7EB !important; margin: 16px 0 !important; }
 
-    /* Column containers */
-    [data-testid="column"] {
-        background-color: #FFFFFF;
-        border-radius: 8px;
-        padding: 20px !important;
-    }
-
-    /* Form card styling */
-    .form-card {
-        background: #FFFFFF;
-        border-radius: 8px;
-        padding: 20px;
-        border: 1px solid #E5E7EB;
-        margin-bottom: 16px;
-    }
-
-    .main-header {
-        background: #1A1A2E;
-        padding: 24px 32px;
-        border-radius: 8px;
-        margin-bottom: 24px;
-        border-left: 4px solid #E39E3D;
-    }
-    .main-header h1 { color: #E39E3D !important; margin: 0; font-size: 22px; }
-    .main-header p  { color: rgba(255,255,255,.65) !important; margin: 4px 0 0; font-size: 13px; }
-
-    .section-label {
-        font-size: 11px !important;
-        font-weight: 700 !important;
-        letter-spacing: .15em;
-        text-transform: uppercase;
-        color: #E39E3D !important;
-        margin-bottom: 8px;
-        display: block;
-    }
-    .status-box {
-        background: #DCFCE7; border: 1px solid #16A34A; border-radius: 6px;
-        padding: 12px 16px; color: #166534 !important; font-size: 13px; margin-bottom: 16px;
-    }
-    .error-box {
-        background: #FEE2E2; border: 1px solid #DC2626; border-radius: 6px;
-        padding: 12px 16px; color: #991B1B !important; font-size: 13px; margin-bottom: 16px;
-    }
-
-    /* Hide Streamlit branding */
+    /* Hide Streamlit chrome */
     #MainMenu, footer, header { visibility: hidden; }
     [data-testid="stToolbar"] { display: none; }
+    [data-testid="stDecoration"] { display: none; }
+
+    /* ── Custom components ── */
+    .fc-topbar {
+        background: #1A1A2E;
+        padding: 0;
+        margin: -1rem -1rem 0 -1rem;
+        border-bottom: 3px solid #E39E3D;
+    }
+    .fc-topbar-inner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 32px;
+    }
+    .fc-logo-row { display: flex; align-items: center; gap: 14px; }
+    .fc-brand-name {
+        font-family: 'Rubik', sans-serif !important;
+        font-size: 20px; font-weight: 700;
+        color: #FFFFFF !important; letter-spacing: .04em;
+    }
+    .fc-brand-name span { color: #E39E3D !important; }
+    .fc-brand-tag {
+        font-size: 9px; font-weight: 600; letter-spacing: .18em;
+        text-transform: uppercase; color: rgba(255,255,255,.4) !important;
+        margin-top: 2px;
+    }
+    .fc-topbar-right {
+        display: flex; align-items: center; gap: 24px;
+    }
+    .fc-topbar-stat { text-align: center; }
+    .fc-topbar-stat-val {
+        font-family: 'Rubik', sans-serif !important;
+        font-size: 18px; font-weight: 700; color: #E39E3D !important; line-height: 1.1;
+    }
+    .fc-topbar-stat-lbl {
+        font-size: 9px; font-weight: 500; letter-spacing: .1em;
+        text-transform: uppercase; color: rgba(255,255,255,.4) !important;
+    }
+    .fc-topbar-divider {
+        width: 1px; height: 36px; background: rgba(255,255,255,.1);
+    }
+    .fc-secp-badge {
+        background: rgba(227,158,61,.12); border: 1px solid rgba(227,158,61,.3);
+        padding: 5px 12px; border-radius: 4px;
+        font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+        color: #E39E3D !important;
+    }
+
+    .fc-amber-strip {
+        height: 3px;
+        background: linear-gradient(90deg, #CC1818 0%, #E39E3D 40%, #F5B855 100%);
+        margin: 0 -1rem 24px -1rem;
+    }
+
+    .fc-section-label {
+        font-size: 10px !important; font-weight: 700 !important;
+        letter-spacing: .18em; text-transform: uppercase;
+        color: #E39E3D !important; margin-bottom: 10px; display: block;
+    }
+
+    .fc-form-panel {
+        background: #FFFFFF;
+        border: 1px solid #E5E7EB;
+        border-radius: 8px;
+        padding: 20px 22px;
+        margin-bottom: 12px;
+    }
+    .fc-form-panel-title {
+        font-family: 'Rubik', sans-serif !important;
+        font-size: 13px; font-weight: 600;
+        color: #1A1A2E !important; margin-bottom: 14px;
+        padding-bottom: 10px; border-bottom: 1px solid #F3F4F6;
+        display: flex; align-items: center; gap: 8px;
+    }
+    .fc-form-panel-title .dot {
+        width: 8px; height: 8px; border-radius: 50%;
+        background: #E39E3D; display: inline-block;
+    }
+
+    .fc-ready-panel {
+        background: #FFFFFF;
+        border: 1px solid #E5E7EB;
+        border-radius: 10px;
+        padding: 48px 32px;
+        text-align: center;
+        min-height: 400px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+    .fc-ready-title {
+        font-family: 'Rubik', sans-serif !important;
+        font-size: 22px; font-weight: 700;
+        color: #1A1A2E !important; margin: 20px 0 8px;
+    }
+    .fc-ready-sub {
+        font-size: 13px; color: #6B7280 !important; line-height: 1.7; max-width: 380px;
+    }
+    .fc-ready-pills {
+        display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 20px;
+    }
+    .fc-ready-pill {
+        font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+        padding: 4px 12px; border: 1px solid #E5E7EB;
+        color: #6B7280 !important; background: #F9FAFB; border-radius: 20px;
+    }
+    .fc-ready-pill.active {
+        background: rgba(227,158,61,.1); border-color: #E39E3D;
+        color: #92400E !important;
+    }
+    .fc-features {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+        margin-top: 28px; width: 100%; max-width: 440px;
+    }
+    .fc-feature {
+        background: #F9FAFB; border: 1px solid #F0F0F0; border-radius: 6px;
+        padding: 12px 14px; text-align: left;
+    }
+    .fc-feature-icon { font-size: 18px; margin-bottom: 4px; }
+    .fc-feature-title {
+        font-family: 'Rubik', sans-serif !important;
+        font-size: 12px; font-weight: 600; color: #1A1A2E !important;
+    }
+    .fc-feature-desc { font-size: 11px; color: #6B7280 !important; margin-top: 2px; }
+
+    .fc-status-ok {
+        background: #DCFCE7; border: 1px solid #16A34A; border-radius: 6px;
+        padding: 10px 16px; color: #166534 !important; font-size: 13px; margin-bottom: 14px;
+        display: flex; align-items: center; gap: 8px;
+    }
+    .fc-status-warn {
+        background: #FEF3C7; border: 1px solid #D97706; border-radius: 6px;
+        padding: 10px 16px; color: #92400E !important; font-size: 13px; margin-bottom: 14px;
+    }
+
+    .fc-contact-bar {
+        background: #1A1A2E; border-radius: 6px; padding: 12px 18px;
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 12px;
+    }
+    .fc-contact-bar span { color: rgba(255,255,255,.5) !important; font-size: 11px; }
+    .fc-contact-bar strong { color: #E39E3D !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# ── Header ────────────────────────────────────────────────────────────────────
+# ── Top navigation bar ─────────────────────────────────────────────────────────
 st.markdown("""
-<div class="main-header">
-    <h1>FLORET CAPITALS — Newsletter Generator</h1>
-    <p>PMEX Division · Research Team Tool · Auto-fetches live market data</p>
+<div class="fc-topbar">
+  <div class="fc-topbar-inner">
+    <div class="fc-logo-row">
+      <img src="https://floretcapitals.com/wp-content/uploads/2024/10/cropped-cropped-Floret-Icon-80x76.png"
+           width="38" height="36" alt="Floret Capitals"
+           onerror="this.style.display='none'"/>
+      <div>
+        <div class="fc-brand-name">FLORET <span>CAPITALS</span></div>
+        <div class="fc-brand-tag">PMEX Division · Research Tool</div>
+      </div>
+    </div>
+    <div class="fc-topbar-right">
+      <div class="fc-topbar-stat">
+        <div class="fc-topbar-stat-val">12,000+</div>
+        <div class="fc-topbar-stat-lbl">Clients</div>
+      </div>
+      <div class="fc-topbar-divider"></div>
+      <div class="fc-topbar-stat">
+        <div class="fc-topbar-stat-val">10+</div>
+        <div class="fc-topbar-stat-lbl">Years</div>
+      </div>
+      <div class="fc-topbar-divider"></div>
+      <div class="fc-topbar-stat">
+        <div class="fc-topbar-stat-val">26</div>
+        <div class="fc-topbar-stat-lbl">Countries</div>
+      </div>
+      <div class="fc-topbar-divider"></div>
+      <div class="fc-secp-badge">✓ SECP Licensed</div>
+    </div>
+  </div>
 </div>
+<div class="fc-amber-strip"></div>
 """, unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -250,36 +404,57 @@ def get_prev(data, key):
 # FORM
 # ══════════════════════════════════════════════════════════════════════════════
 
-col_left, col_right = st.columns([1, 2])
+col_left, col_right = st.columns([1, 2], gap="large")
 
 with col_left:
-    st.markdown("### ⚙️ Newsletter Settings")
+    # Edition type panel
+    st.markdown("""
+    <div class="fc-form-panel">
+      <div class="fc-form-panel-title"><span class="dot"></span> Edition Settings</div>
+    </div>
+    """, unsafe_allow_html=True)
+
     edition_type = st.radio("Edition Type", ["Daily", "Weekly"], horizontal=True)
     edition_date = st.date_input("Edition Date", value=date.today())
 
     if edition_type == "Weekly":
-        cal_start = st.date_input("Week Start", value=date.today())
-        cal_end   = st.date_input("Week End",   value=date.today() + timedelta(days=6))
+        c1, c2 = st.columns(2)
+        with c1:
+            cal_start = st.date_input("Week Start", value=date.today())
+        with c2:
+            cal_end = st.date_input("Week End", value=date.today() + timedelta(days=6))
         cal_window = f"Week of {cal_start.strftime('%b %-d')} – {cal_end.strftime('%b %-d, %Y')}"
     else:
         cal_window = edition_date.strftime("%B %-d, %Y")
 
     st.markdown("---")
-    st.markdown('<div class="section-label">PKR Exchange Rates</div>', unsafe_allow_html=True)
+
+    # PKR rates panel
+    st.markdown("""
+    <div class="fc-form-panel" style="margin-bottom:8px;">
+      <div class="fc-form-panel-title"><span class="dot"></span> PKR Exchange Rates</div>
+    </div>
+    """, unsafe_allow_html=True)
+    st.markdown('<span class="fc-section-label">Enter today\'s interbank rates</span>', unsafe_allow_html=True)
 
     c1, c2 = st.columns(2)
     with c1:
-        usd_pkr = st.number_input("USD/PKR", value=278.50, format="%.2f")
-        gbp_pkr = st.number_input("GBP/PKR", value=355.72, format="%.2f")
+        usd_pkr = st.number_input("USD / PKR", value=278.50, format="%.2f")
+        gbp_pkr = st.number_input("GBP / PKR", value=355.72, format="%.2f")
     with c2:
-        eur_pkr = st.number_input("EUR/PKR", value=316.05, format="%.2f")
-        sar_pkr = st.number_input("SAR/PKR", value=74.27,  format="%.2f")
+        eur_pkr = st.number_input("EUR / PKR", value=316.05, format="%.2f")
+        sar_pkr = st.number_input("SAR / PKR", value=74.27,  format="%.2f")
 
     aed_pkr = round(usd_pkr / 3.6725, 2)
 
     if edition_type == "Weekly":
         st.markdown("---")
-        st.markdown('<div class="section-label">Central Bank Rates</div>', unsafe_allow_html=True)
+        st.markdown("""
+        <div class="fc-form-panel" style="margin-bottom:8px;">
+          <div class="fc-form-panel-title"><span class="dot"></span> Central Bank Rates</div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.markdown('<span class="fc-section-label">Current policy rates</span>', unsafe_allow_html=True)
         c1, c2 = st.columns(2)
         with c1:
             fed_rate = st.number_input("FED (%)", value=4.50, step=0.25, format="%.2f")
@@ -291,6 +466,15 @@ with col_left:
         fed_rate, ecb_rate, boj_rate, sbp_rate = 4.50, 2.00, 0.75, 12.0
 
     st.markdown("---")
+
+    # Contact bar
+    st.markdown("""
+    <div class="fc-contact-bar">
+      <span>📞 <strong>+92 311 1000183</strong></span>
+      <span>contact@floretcapitals.com</span>
+    </div>
+    """, unsafe_allow_html=True)
+
     generate_btn = st.button("🚀 Generate Newsletter", type="primary", use_container_width=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -303,9 +487,9 @@ with col_right:
             data, errors = fetch_all()
 
         if errors:
-            st.markdown(f'<div class="error-box">⚠️ Could not fetch: {", ".join(errors)} — using placeholder values.</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="fc-status-warn">⚠️ Could not fetch: {", ".join(errors)} — using placeholder values.</div>', unsafe_allow_html=True)
 
-        st.markdown(f'<div class="status-box">✅ Live data fetched · {len(data)} instruments loaded · {datetime.now().strftime("%H:%M PKT")}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="fc-status-ok">✅ Live data fetched · {len(data)} instruments loaded · {datetime.now().strftime("%H:%M PKT")}</div>', unsafe_allow_html=True)
 
         # ── Live prices ──
         def safe(key, fallback=0.0, field="Close"):
@@ -1272,10 +1456,44 @@ body{{background:#F0F2F5;font-family:var(--body);color:var(--text);width:794px;m
 
     else:
         st.markdown("""
-        <div style="background:#F9FAFB;border:2px dashed #D1D5DB;border-radius:8px;padding:40px;text-align:center;color:#6B7280;">
-            <div style="font-size:32px;margin-bottom:12px;">📰</div>
-            <div style="font-size:16px;font-weight:600;color:#111827;margin-bottom:8px;">Ready to Generate</div>
-            <div style="font-size:13px;">Fill in the form on the left and click <strong>Generate Newsletter</strong>.<br/>
-            All market data (prices, technicals, FX) is fetched automatically — for free.</div>
+        <div class="fc-ready-panel">
+          <img src="https://floretcapitals.com/wp-content/uploads/2024/10/cropped-cropped-Floret-Icon-80x76.png"
+               width="64" alt="Floret Capitals" style="opacity:.9;"
+               onerror="this.style.display='none'"/>
+          <div class="fc-ready-title">PMEX Newsletter Generator</div>
+          <div class="fc-ready-sub">
+            Fill in the form on the left and click <strong>Generate Newsletter</strong>.<br/>
+            All market data is fetched live and automatically — completely free.
+          </div>
+          <div class="fc-ready-pills">
+            <span class="fc-ready-pill active">Gold · Silver</span>
+            <span class="fc-ready-pill active">Crude · Brent</span>
+            <span class="fc-ready-pill active">Forex · DXY</span>
+            <span class="fc-ready-pill active">RSI · 50-DMA</span>
+            <span class="fc-ready-pill">PMEX Specs</span>
+            <span class="fc-ready-pill">Strategy Corner</span>
+          </div>
+          <div class="fc-features">
+            <div class="fc-feature">
+              <div class="fc-feature-icon">📡</div>
+              <div class="fc-feature-title">Live Market Data</div>
+              <div class="fc-feature-desc">Auto-fetched via Yahoo Finance — no API key needed</div>
+            </div>
+            <div class="fc-feature">
+              <div class="fc-feature-icon">📊</div>
+              <div class="fc-feature-title">Auto Technicals</div>
+              <div class="fc-feature-desc">RSI, 50-DMA, support & resistance computed instantly</div>
+            </div>
+            <div class="fc-feature">
+              <div class="fc-feature-icon">🗞️</div>
+              <div class="fc-feature-title">Daily & Weekly</div>
+              <div class="fc-feature-desc">Two editions — intraday or weekly swing levels</div>
+            </div>
+            <div class="fc-feature">
+              <div class="fc-feature-icon">📥</div>
+              <div class="fc-feature-title">Download HTML</div>
+              <div class="fc-feature-desc">Open in Chrome → Print → Save as PDF in seconds</div>
+            </div>
+          </div>
         </div>
         """, unsafe_allow_html=True)
