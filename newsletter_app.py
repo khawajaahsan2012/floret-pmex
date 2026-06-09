@@ -372,6 +372,69 @@ def sparkline_path(df, width=100, height=26):
     pts = " ".join(f"{x:.1f},{y:.1f}" for x, y in zip(xs, ys))
     return pts
 
+def parse_margins(uploaded_file):
+    """Parse PMEX margin Excel file. Returns dict: contract_code -> {margin_pct, margin_pkr, ref_price}"""
+    try:
+        df = pd.read_excel(uploaded_file, sheet_name="Margin File", header=None)
+        # Header row is at index 3
+        df.columns = range(len(df.columns))
+        # Find header row
+        header_row = None
+        for i, row in df.iterrows():
+            if "Contract Code" in str(row.values):
+                header_row = i
+                break
+        if header_row is None:
+            return {}
+        df.columns = df.iloc[header_row]
+        df = df.iloc[header_row + 1:].reset_index(drop=True)
+        # Rename columns
+        col_map = {}
+        for c in df.columns:
+            cs = str(c).strip().lower()
+            if "contract" in cs and "code" in cs:
+                col_map[c] = "code"
+            elif "reference" in cs:
+                col_map[c] = "ref_price"
+            elif "initial margin value" in cs or ("initial" in cs and "value" in cs):
+                col_map[c] = "margin_pkr"
+            elif "initial" in cs and "magin" in cs or "initial" in cs and "margin" in cs:
+                col_map[c] = "margin_pct"
+        df = df.rename(columns=col_map)
+        result = {}
+        for _, row in df.iterrows():
+            code = str(row.get("code", "")).strip().upper()
+            if not code or code == "NAN":
+                continue
+            try:
+                result[code] = {
+                    "ref_price":  float(row.get("ref_price",  0) or 0),
+                    "margin_pct": float(row.get("margin_pct", 0) or 0),
+                    "margin_pkr": int(float(row.get("margin_pkr", 0) or 0)),
+                }
+            except (ValueError, TypeError):
+                continue
+        return result
+    except Exception:
+        return {}
+
+def get_margin(margins, code, default_pct, default_pkr):
+    """Get margin values from parsed margins dict, fall back to defaults."""
+    code_upper = code.upper()
+    # Try exact match first, then prefix match
+    if code_upper in margins:
+        m = margins[code_upper]
+        pct = m["margin_pct"] if m["margin_pct"] > 0 else default_pct
+        pkr = m["margin_pkr"] if m["margin_pkr"] > 0 else default_pkr
+        return pct, pkr
+    # Try matching without the exchange suffix (e.g. "GO1OZ AU26" vs "GO1OZ AU26ID")
+    for k, m in margins.items():
+        if k.startswith(code_upper.split()[0]):
+            pct = m["margin_pct"] if m["margin_pct"] > 0 else default_pct
+            pkr = m["margin_pkr"] if m["margin_pkr"] > 0 else default_pkr
+            return pct, pkr
+    return default_pct, default_pkr
+
 @st.cache_data(ttl=300)
 def fetch_all():
     data = {}
@@ -467,6 +530,17 @@ with col_left:
 
     st.markdown("---")
 
+    # Margins upload panel
+    st.markdown("""
+    <div class="fc-form-panel" style="margin-bottom:8px;">
+      <div class="fc-form-panel-title"><span class="dot"></span> PMEX Margins File <span style="font-size:10px;color:#6B7280;font-weight:400;">(optional)</span></div>
+    </div>
+    """, unsafe_allow_html=True)
+    st.markdown('<span class="fc-section-label">Upload latest PMEX margin sheet</span>', unsafe_allow_html=True)
+    margins_file = st.file_uploader("Upload Margins Excel (.xlsx)", type=["xlsx"], label_visibility="collapsed")
+
+    st.markdown("---")
+
     # Contact bar
     st.markdown("""
     <div class="fc-contact-bar">
@@ -489,7 +563,16 @@ with col_right:
         if errors:
             st.markdown(f'<div class="fc-status-warn">⚠️ Could not fetch: {", ".join(errors)} — using placeholder values.</div>', unsafe_allow_html=True)
 
+        # Parse margins file if uploaded
+        margins = {}
+        if margins_file is not None:
+            margins = parse_margins(margins_file)
+            margin_status = f"✅ Margins loaded · {len(margins)} contracts · {margins_file.name}"
+        else:
+            margin_status = "ℹ️ No margins file uploaded — using default values"
+
         st.markdown(f'<div class="fc-status-ok">✅ Live data fetched · {len(data)} instruments loaded · {datetime.now().strftime("%H:%M PKT")}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="fc-status-ok" style="background:#EFF6FF;border-color:#3B82F6;">{margin_status}</div>', unsafe_allow_html=True)
 
         # ── Live prices ──
         def safe(key, fallback=0.0, field="Close"):
@@ -1344,8 +1427,8 @@ body{{background:#F0F2F5;font-family:var(--body);color:var(--text);width:794px;m
   <table class="specs-table">
     <thead><tr><th>Contract Code</th><th>Description</th><th>Size</th><th>Price</th><th>Tola Equiv.</th><th>Margin (PKR)</th><th>%</th></tr></thead>
     <tbody>
-      <tr><td>GO1OZ AU26</td><td>Gold — 1 Troy Ounce</td><td>1 oz</td><td>${gold_p:,.2f}</td><td>2.667 tola</td><td>69,800</td><td>5.75%</td></tr>
-      <tr><td>GO1OZ AU26 ID</td><td>Gold 1 Oz INTRADAY</td><td>1 oz</td><td>${gold_p:,.2f}</td><td>2.667 tola</td><td>36,400</td><td>3%</td></tr>
+      <tr><td>GO1OZ AU26</td><td>Gold — 1 Troy Ounce</td><td>1 oz</td><td>${gold_p:,.2f}</td><td>2.667 tola</td><td>{get_margin(margins,"GO1OZ AU26",0.0575,69800)[1]:,}</td><td>{get_margin(margins,"GO1OZ AU26",0.0575,69800)[0]*100:.2f}%</td></tr>
+      <tr><td>GO1OZ AU26 ID</td><td>Gold 1 Oz INTRADAY</td><td>1 oz</td><td>${gold_p:,.2f}</td><td>2.667 tola</td><td>{get_margin(margins,"GO1OZ AU26ID",0.03,36400)[1]:,}</td><td>{get_margin(margins,"GO1OZ AU26ID",0.03,36400)[0]*100:.2f}%</td></tr>
     </tbody>
   </table>
 
@@ -1353,8 +1436,8 @@ body{{background:#F0F2F5;font-family:var(--body);color:var(--text);width:794px;m
   <table class="specs-table">
     <thead><tr><th>Contract Code</th><th>Description</th><th>Size</th><th>Price</th><th>Tola Equiv.</th><th>Margin (PKR)</th><th>%</th></tr></thead>
     <tbody>
-      <tr><td>SL10 JY26</td><td>Silver — 10 Troy Oz</td><td>10 oz</td><td>${silver_p:.2f}</td><td>26.67 tola</td><td>21,000</td><td>11%</td></tr>
-      <tr><td>SL10 JY26 ID</td><td>Silver 10 Oz INTRADAY</td><td>10 oz</td><td>${silver_p:.2f}</td><td>26.67 tola</td><td>10,500</td><td>5.5%</td></tr>
+      <tr><td>SL10 JY26</td><td>Silver — 10 Troy Oz</td><td>10 oz</td><td>${silver_p:.2f}</td><td>26.67 tola</td><td>{get_margin(margins,"SL10 JY26",0.11,21000)[1]:,}</td><td>{get_margin(margins,"SL10 JY26",0.11,21000)[0]*100:.2f}%</td></tr>
+      <tr><td>SL10 JY26 ID</td><td>Silver 10 Oz INTRADAY</td><td>10 oz</td><td>${silver_p:.2f}</td><td>26.67 tola</td><td>{get_margin(margins,"SL10 JY26ID",0.055,10500)[1]:,}</td><td>{get_margin(margins,"SL10 JY26ID",0.055,10500)[0]*100:.2f}%</td></tr>
     </tbody>
   </table>
 
@@ -1362,8 +1445,8 @@ body{{background:#F0F2F5;font-family:var(--body);color:var(--text);width:794px;m
   <table class="specs-table">
     <thead><tr><th>Contract Code</th><th>Description</th><th>Size</th><th>Price</th><th>Margin (PKR)</th><th>%</th></tr></thead>
     <tbody>
-      <tr><td>CRUDE10 JY26</td><td>WTI Crude Oil — 10 Barrels</td><td>10 bbl</td><td>${wti_p:.2f}</td><td>43,200</td><td>17%</td></tr>
-      <tr><td>CRUDE10 JY26 ID</td><td>WTI Crude 10 Bbl INTRADAY</td><td>10 bbl</td><td>${wti_p:.2f}</td><td>43,200</td><td>17%</td></tr>
+      <tr><td>CRUDE10 JY26</td><td>WTI Crude Oil — 10 Barrels</td><td>10 bbl</td><td>${wti_p:.2f}</td><td>{get_margin(margins,"CRUDE10 JY26",0.17,43200)[1]:,}</td><td>{get_margin(margins,"CRUDE10 JY26",0.17,43200)[0]*100:.0f}%</td></tr>
+      <tr><td>CRUDE10 JY26 ID</td><td>WTI Crude 10 Bbl INTRADAY</td><td>10 bbl</td><td>${wti_p:.2f}</td><td>{get_margin(margins,"CRUDE10 JY26ID",0.17,43200)[1]:,}</td><td>{get_margin(margins,"CRUDE10 JY26ID",0.17,43200)[0]*100:.0f}%</td></tr>
     </tbody>
   </table>
 
@@ -1371,7 +1454,7 @@ body{{background:#F0F2F5;font-family:var(--body);color:var(--text);width:794px;m
   <table class="specs-table" style="margin-bottom:24px;">
     <thead><tr><th>Contract Code</th><th>Description</th><th>Size</th><th>Price</th><th>Margin (PKR)</th><th>%</th></tr></thead>
     <tbody>
-      <tr><td>BRENT10 AU26</td><td>Brent Crude Oil — 10 Barrels</td><td>10 bbl</td><td>${brent_p:.2f}</td><td>44,600</td><td>17%</td></tr>
+      <tr><td>BRENT10 AU26</td><td>Brent Crude Oil — 10 Barrels</td><td>10 bbl</td><td>${brent_p:.2f}</td><td>{get_margin(margins,"BRENT10 AU26",0.17,44600)[1]:,}</td><td>{get_margin(margins,"BRENT10 AU26",0.17,44600)[0]*100:.0f}%</td></tr>
     </tbody>
   </table>
 
