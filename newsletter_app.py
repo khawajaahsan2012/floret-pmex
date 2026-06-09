@@ -8,10 +8,106 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
-from datetime import datetime, date, timedelta
-import warnings, base64, re
+from datetime import datetime, date, timedelta, timezone
+import warnings, base64, re, requests
 
 warnings.filterwarnings("ignore")
+
+# ── Calendar auto-fetch (same source as original Cloudflare Worker) ──────────
+COUNTRY_FLAGS = {
+    "USD":"🇺🇸","EUR":"🇪🇺","GBP":"🇬🇧","JPY":"🇯🇵","AUD":"🇦🇺",
+    "CAD":"🇨🇦","CHF":"🇨🇭","CNY":"🇨🇳","NZD":"🇳🇿","KRW":"🇰🇷",
+    "ALL":"🌍",
+}
+PMEX_MAP = {
+    "gold":"Gold · XAU", "silver":"Silver · XAG", "crude":"Crude · Brent",
+    "brent":"Crude · Brent", "natural gas":"Natural Gas", "opec":"Crude · Brent",
+    "eia petroleum":"Crude · Brent", "oil inventories":"Crude · Brent",
+    "gas storage":"Natural Gas", "cpi":"Gold · Oil · USD", "inflation":"Gold · Oil · USD",
+    "nfp":"Gold · Oil · USD", "non-farm":"Gold · Oil · USD", "payroll":"Gold · Oil · USD",
+    "fed":"Gold · Oil · USD", "fomc":"Gold · Oil · USD", "interest rate":"Gold · Oil · USD",
+    "ecb":"EUR/USD · Gold", "boj":"USD/JPY", "boe":"GBP/USD",
+    "gdp":"Gold · Oil · USD", "pmi":"Gold · Oil · USD", "ppi":"Gold · Oil · USD",
+    "unemployment":"Gold · Oil · USD", "adp":"Gold · Oil · USD",
+    "eur":"EUR/USD", "gbp":"GBP/USD", "jpy":"USD/JPY",
+    "aud":"AUD/USD · Metals", "cad":"USD/CAD · Crude", "rba":"AUD/USD",
+    "boa":"AUD/USD", "sbp":"USD/PKR",
+}
+KW_HIGH = ["crude oil inventories","natural gas storage","opec","eia petroleum"]
+
+def pmex_label(title):
+    tl = title.lower()
+    for k, v in PMEX_MAP.items():
+        if k in tl:
+            return v
+    return "—"
+
+@st.cache_data(ttl=3600)
+def fetch_calendar():
+    """Fetch ForexFactory high-impact calendar — same feed as original Worker."""
+    UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+    events = []
+    for rng in ["thisweek", "nextweek"]:
+        try:
+            r = requests.get(
+                f"https://nfs.faireconomy.media/ff_calendar_{rng}.json",
+                headers={"User-Agent": UA, "Accept": "application/json"},
+                timeout=10,
+            )
+            if r.status_code == 200:
+                data = r.json()
+                for e in data:
+                    imp = (e.get("impact") or "").lower()
+                    title = e.get("title") or ""
+                    if imp == "high" or any(k in title.lower() for k in KW_HIGH):
+                        events.append(e)
+                break
+        except Exception:
+            continue
+    return events
+
+def format_calendar_html(events):
+    if not events:
+        return '<div class="cal-quiet" style="margin-bottom:24px;">⚡ Calendar feed unavailable — check back shortly.</div>'
+    PKT = timezone(timedelta(hours=5))
+    rows = ""
+    for e in events:
+        try:
+            dt_utc = datetime.fromisoformat(e["date"].replace("Z", "+00:00"))
+            dt_pkt = dt_utc.astimezone(PKT)
+            day_str  = dt_pkt.strftime("%a %b %-d")
+            time_str = dt_pkt.strftime("%H:%M")
+        except Exception:
+            day_str, time_str = "—", "—"
+        country = e.get("country", "ALL")
+        flag    = COUNTRY_FLAGS.get(country, "🌍")
+        title   = e.get("title", "—")
+        prev    = e.get("previous") or "—"
+        est     = e.get("forecast") or "—"
+        pmex    = pmex_label(title)
+        rows += f"""<tr>
+          <td style="font-family:var(--mono);font-size:10px;white-space:nowrap;">
+            <strong>{day_str}</strong><br/>
+            <span style="color:var(--amber);font-weight:700;">{time_str} PKT</span>
+          </td>
+          <td style="font-size:16px;text-align:center;">{flag}</td>
+          <td style="font-weight:600;font-size:11px;color:var(--dark);">{title}</td>
+          <td style="font-family:var(--mono);font-size:10px;">{prev}</td>
+          <td style="font-family:var(--mono);font-size:10px;color:var(--amber);font-weight:700;">{est}</td>
+          <td><span class="imp-h">HIGH</span></td>
+          <td style="font-size:9px;color:var(--muted);font-weight:600;">{pmex}</td>
+        </tr>"""
+    return f"""
+    <div style="background:#FFF9EF;border:1px solid rgba(227,158,61,.3);padding:8px 14px;margin-bottom:10px;font-size:11px;color:#92400E;">
+      ⚡ <strong>HIGH-IMPACT &amp; KEY COMMODITY RELEASES</strong> — Auto-fetched live feed, converted to Pakistan time.
+    </div>
+    <table class="cal-table" style="margin-bottom:24px;">
+      <thead><tr>
+        <th>Date &amp; Time (PKT)</th><th>🌍</th><th>Event</th>
+        <th>Previous</th><th>Estimate</th><th>Impact</th><th>PMEX</th>
+      </tr></thead>
+      <tbody>{rows}</tbody>
+    </table>"""
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -560,6 +656,7 @@ with col_left:
         with c2:
             ecb_rate = st.number_input("ECB (%)", value=2.00, step=0.25, format="%.2f")
             sbp_rate = st.number_input("SBP (%)", value=12.0, step=0.25, format="%.2f")
+
     else:
         fed_rate, ecb_rate, boj_rate, sbp_rate = 4.50, 2.00, 0.75, 12.0
 
@@ -774,6 +871,24 @@ with col_right:
             <li>WTI CRUDE10: {'Under pressure' if wti_chg < 0 else 'Recovering'} — rallies toward ${T['wti']['res']:,.2f} may offer {'shorts' if wti_chg < 0 else 'longs'}. Margin 17%.</li>
             <li>Silver SL10: Gold/Silver ratio at {gs_ratio}x. Support ${T['silver']['sup']:,.2f}, resistance ${T['silver']['res']:,.2f}.</li>
             <li>Risk management: Widen stops 20–30% around high-impact releases. Size to PMEX margins shown in specs. Avoid max leverage in volatile windows.</li>"""
+
+        def _build_calendar(etype, _unused=""):
+            raw_events = fetch_calendar()
+            if etype == "Daily":
+                PKT = timezone(timedelta(hours=5))
+                today_pkt = datetime.now(PKT).date()
+                daily_events = []
+                for e in raw_events:
+                    try:
+                        dt = datetime.fromisoformat(e["date"].replace("Z", "+00:00")).astimezone(PKT)
+                        if dt.date() == today_pkt:
+                            daily_events.append(e)
+                    except Exception:
+                        pass
+                if not daily_events:
+                    return '<div class="cal-quiet">No high-impact events scheduled today.<br/><span style="font-size:11px;">A quiet day on the economic calendar — no market-moving releases. See the Weekly edition for the week ahead.</span></div>'
+                return format_calendar_html(daily_events)
+            return format_calendar_html(raw_events)
 
         strat_title, strat_body, strat_bullets = strategy_corner()
 
@@ -1197,13 +1312,7 @@ body{{background:#F0F2F5;font-family:var(--body);color:var(--text);width:794px;m
     <span class="sec-title">{'High-Impact Events — This Week' if edition_type == 'Weekly' else "Today's High-Impact Events"}</span>
     <span class="sec-meta">Live feed · PKT (UTC+5)</span>
   </div>
-  {'<div class="cal-quiet">No high-impact events scheduled today.<br/><span style="font-size:11px;">A quiet day on the economic calendar — no market-moving releases. See the Weekly edition for the week ahead.</span></div>' if edition_type == 'Daily' else '''
-  <table class="cal-table" style="margin-bottom:24px;">
-    <thead><tr><th>Date &amp; Time (PKT)</th><th>🌍</th><th>Event</th><th>Prev</th><th>Estimate</th><th>Impact</th><th>PMEX</th></tr></thead>
-    <tbody>
-      <tr><td colspan="7" style="color:var(--muted);font-size:11px;font-style:italic;padding:12px 8px;">Weekly economic calendar — team to add key events for the week ahead. See ForexFactory.com or Investing.com for the live feed.</td></tr>
-    </tbody>
-  </table>'''}
+  {_build_calendar(edition_type)}
 
   <!-- CENTRAL BANK WATCH -->
   <div class="sec-head">
