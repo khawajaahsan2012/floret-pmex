@@ -186,12 +186,30 @@ st.markdown("""
 
     /* Download button */
     [data-testid="stDownloadButton"] > button {
-        background: #1A1A2E !important;
-        color: #E39E3D !important;
-        font-weight: 700 !important;
+        background: linear-gradient(135deg, #E39E3D 0%, #F5B855 50%, #E39E3D 100%) !important;
+        background-size: 200% auto !important;
+        color: #1A1A2E !important;
+        font-weight: 800 !important;
         font-family: 'Rubik', sans-serif !important;
-        border: 1px solid #E39E3D !important;
-        border-radius: 6px !important;
+        font-size: 15px !important;
+        letter-spacing: .06em !important;
+        border: none !important;
+        border-radius: 10px !important;
+        padding: 18px 32px !important;
+        height: auto !important;
+        min-height: 60px !important;
+        box-shadow: 0 4px 20px rgba(227,158,61,.45), 0 1px 4px rgba(0,0,0,.15) !important;
+        transition: all .25s ease !important;
+        text-transform: uppercase !important;
+    }
+    [data-testid="stDownloadButton"] > button:hover {
+        background-position: right center !important;
+        box-shadow: 0 8px 32px rgba(227,158,61,.65), 0 2px 8px rgba(0,0,0,.2) !important;
+        transform: translateY(-2px) !important;
+    }
+    [data-testid="stDownloadButton"] > button:active {
+        transform: translateY(0px) !important;
+        box-shadow: 0 2px 10px rgba(227,158,61,.4) !important;
     }
 
     /* Expander */
@@ -1658,20 +1676,51 @@ body{{background:#F0F2F5;font-family:var(--body);color:var(--text);width:794px;m
 </html>"""
 
         # Download
-        b64 = base64.b64encode(html.encode()).decode()
         fname = f"floret-{edition_type.lower()}-{edition_date.strftime('%Y-%m-%d')}.html"
 
+        st.markdown(f"""
+        <div style="
+            background: linear-gradient(135deg, #1A1A2E 0%, #252540 100%);
+            border: 1px solid rgba(227,158,61,.35);
+            border-radius: 12px;
+            padding: 24px 28px 20px;
+            margin: 8px 0 4px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        ">
+            <div style="
+                width: 52px; height: 52px; flex-shrink: 0;
+                background: rgba(227,158,61,.15);
+                border: 1.5px solid rgba(227,158,61,.4);
+                border-radius: 50%;
+                display: flex; align-items: center; justify-content: center;
+                font-size: 22px;
+            ">📄</div>
+            <div style="flex: 1;">
+                <div style="font-family:'Rubik',sans-serif; font-size:15px; font-weight:700;
+                            color:#FFFFFF; letter-spacing:.02em; margin-bottom:3px;">
+                    {brief_type} Newsletter Ready
+                </div>
+                <div style="font-size:11px; color:rgba(255,255,255,.45); line-height:1.5;">
+                    {edition_date.strftime('%B %-d, %Y')} &nbsp;·&nbsp; HTML format
+                    &nbsp;·&nbsp; Open in Chrome → Print → Save as PDF
+                </div>
+            </div>
+            <div style="font-family:'DM Mono',monospace; font-size:10px;
+                        color:rgba(227,158,61,.6); text-align:right; letter-spacing:.06em;">
+                FLORET<br/>CAPITALS
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
         st.download_button(
-            label=f"📥 Download {brief_type} Newsletter (HTML)",
+            label=f"⬇  DOWNLOAD {brief_type.upper()} NEWSLETTER",
             data=html.encode(),
             file_name=fname,
             mime="text/html",
             use_container_width=True,
         )
-
-        st.markdown("---")
-        st.markdown("**How to convert to PDF:**")
-        st.markdown("1. Open the downloaded HTML file in Chrome\n2. Press `Ctrl+P` (or `Cmd+P` on Mac)\n3. Set destination to **Save as PDF**\n4. Set margins to **None** → Save")
 
         st.markdown("---")
         with st.expander("Preview newsletter HTML", expanded=False):
