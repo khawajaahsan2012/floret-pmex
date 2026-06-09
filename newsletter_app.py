@@ -23,25 +23,112 @@ st.set_page_config(
 # ── Styling ───────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-    [data-testid="stAppViewContainer"] { background: #F0F2F5; }
-    .main-header {
-        background: #1A1A2E; color: white; padding: 24px 32px; border-radius: 8px;
-        margin-bottom: 24px; border-left: 4px solid #E39E3D;
+    /* Force light theme throughout */
+    html, body, [data-testid="stAppViewContainer"], [data-testid="stApp"],
+    [data-testid="stSidebar"], section[data-testid="stSidebar"] {
+        background-color: #F0F2F5 !important;
+        color: #111827 !important;
     }
-    .main-header h1 { color: #E39E3D; margin: 0; font-size: 22px; }
-    .main-header p  { color: rgba(255,255,255,.6); margin: 4px 0 0; font-size: 13px; }
+    [data-testid="stMain"] { background-color: #F0F2F5 !important; }
+    [data-testid="block-container"] { background-color: #F0F2F5 !important; }
+
+    /* All text black */
+    p, span, label, div, h1, h2, h3, li {
+        color: #111827 !important;
+    }
+
+    /* Inputs */
+    [data-testid="stNumberInput"] input,
+    [data-testid="stDateInput"] input,
+    input[type="number"], input[type="text"] {
+        background-color: #FFFFFF !important;
+        color: #111827 !important;
+        border: 1px solid #D1D5DB !important;
+        border-radius: 6px !important;
+    }
+
+    /* Radio buttons */
+    [data-testid="stRadio"] label { color: #111827 !important; }
+    [data-testid="stRadio"] > div { color: #111827 !important; }
+
+    /* Buttons */
+    [data-testid="stButton"] > button {
+        background-color: #E39E3D !important;
+        color: #1A1A2E !important;
+        font-weight: 700 !important;
+        border: none !important;
+        border-radius: 6px !important;
+    }
+    [data-testid="stButton"] > button:hover {
+        background-color: #F5B855 !important;
+    }
+
+    /* Download button */
+    [data-testid="stDownloadButton"] > button {
+        background-color: #1A1A2E !important;
+        color: #E39E3D !important;
+        font-weight: 700 !important;
+        border: 1px solid #E39E3D !important;
+        border-radius: 6px !important;
+    }
+
+    /* Expander */
+    [data-testid="stExpander"] {
+        background-color: #FFFFFF !important;
+        border: 1px solid #E5E7EB !important;
+        border-radius: 6px !important;
+    }
+
+    /* Spinner */
+    [data-testid="stSpinner"] { color: #E39E3D !important; }
+
+    /* Column containers */
+    [data-testid="column"] {
+        background-color: #FFFFFF;
+        border-radius: 8px;
+        padding: 20px !important;
+    }
+
+    /* Form card styling */
+    .form-card {
+        background: #FFFFFF;
+        border-radius: 8px;
+        padding: 20px;
+        border: 1px solid #E5E7EB;
+        margin-bottom: 16px;
+    }
+
+    .main-header {
+        background: #1A1A2E;
+        padding: 24px 32px;
+        border-radius: 8px;
+        margin-bottom: 24px;
+        border-left: 4px solid #E39E3D;
+    }
+    .main-header h1 { color: #E39E3D !important; margin: 0; font-size: 22px; }
+    .main-header p  { color: rgba(255,255,255,.65) !important; margin: 4px 0 0; font-size: 13px; }
+
     .section-label {
-        font-size: 11px; font-weight: 700; letter-spacing: .15em;
-        text-transform: uppercase; color: #E39E3D; margin-bottom: 8px;
+        font-size: 11px !important;
+        font-weight: 700 !important;
+        letter-spacing: .15em;
+        text-transform: uppercase;
+        color: #E39E3D !important;
+        margin-bottom: 8px;
+        display: block;
     }
     .status-box {
         background: #DCFCE7; border: 1px solid #16A34A; border-radius: 6px;
-        padding: 12px 16px; color: #166534; font-size: 13px; margin-bottom: 16px;
+        padding: 12px 16px; color: #166534 !important; font-size: 13px; margin-bottom: 16px;
     }
     .error-box {
         background: #FEE2E2; border: 1px solid #DC2626; border-radius: 6px;
-        padding: 12px 16px; color: #991B1B; font-size: 13px; margin-bottom: 16px;
+        padding: 12px 16px; color: #991B1B !important; font-size: 13px; margin-bottom: 16px;
     }
+
+    /* Hide Streamlit branding */
+    #MainMenu, footer, header { visibility: hidden; }
+    [data-testid="stToolbar"] { display: none; }
 </style>
 """, unsafe_allow_html=True)
 
