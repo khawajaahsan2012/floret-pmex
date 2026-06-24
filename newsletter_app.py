@@ -621,7 +621,7 @@ def fmt_age(hours):
     return f"{int(hours / 24)}d ago"
 
 def _parse_article(a, now_ts):
-    """Handle both old and new yfinance news structures. Returns (title, publisher, age_h) or None."""
+    """Handle both old and new yfinance news structures. Returns (title, publisher, age_h, url) or None."""
     # New yfinance structure (>= 0.2.50): article has 'content' dict
     if "content" in a and isinstance(a["content"], dict):
         c = a["content"]
@@ -635,15 +635,18 @@ def _parse_article(a, now_ts):
                 age_h = (now_ts - pub_dt.timestamp()) / 3600
             except Exception:
                 pass
+        url = ((c.get("canonicalUrl") or {}).get("url")
+               or (c.get("clickThroughUrl") or {}).get("url") or "")
     else:
         # Old yfinance structure: flat dict
         title = (a.get("title") or "").strip()
         publisher = (a.get("publisher") or "").strip()
         pub = a.get("providerPublishTime", 0)
         age_h = (now_ts - pub) / 3600 if pub else 9999
+        url = a.get("link") or ""
     if not title or age_h > 168:
         return None
-    return title, publisher, age_h
+    return title, publisher, age_h, url
 
 @st.cache_data(ttl=3600)
 def fetch_news():
@@ -657,8 +660,8 @@ def fetch_news():
             for a in articles[:12]:
                 parsed = _parse_article(a, now_ts)
                 if parsed:
-                    title, publisher, age_h = parsed
-                    items.append({"title": title, "publisher": publisher, "age_hours": age_h})
+                    title, publisher, age_h, url = parsed
+                    items.append({"title": title, "publisher": publisher, "age_hours": age_h, "url": url})
                 if len(items) == 3:
                     break
             news_map[key] = items
@@ -821,7 +824,7 @@ with col_right:
             ("natgas", "NGAS1K"),
             ("copper", "COPPER"),
             ("sp500",  "SP5"),
-            ("nasdaq", "NQ"),
+            ("nasdaq", "NSDQ100"),
         ]
         if margins:
             for key, prefix in pmex_map:
@@ -855,8 +858,16 @@ with col_right:
             items = news_map.get(key, [])
             rows = ""
             for a in items:
+                url = a.get("url", "")
+                title_html = (
+                    f'<a href="{url}" target="_blank" rel="noopener" '
+                    f'style="color:var(--text);text-decoration:none;font-weight:600;">'
+                    f'{a["title"]}</a>'
+                    if url else
+                    f'<span style="font-weight:600;">{a["title"]}</span>'
+                )
                 rows += f"""<div style="padding:9px 12px;border-bottom:1px solid var(--grey3);">
-                  <div style="font-size:11px;font-weight:600;color:var(--text);line-height:1.55;margin-bottom:3px;">{a['title']}</div>
+                  <div style="font-size:11px;line-height:1.55;margin-bottom:3px;">{title_html}</div>
                   <div style="font-size:9px;color:var(--muted);letter-spacing:.04em;">{a['publisher']} &nbsp;·&nbsp; {fmt_age(a['age_hours'])}</div>
                 </div>"""
             if not rows:
@@ -1382,23 +1393,11 @@ body{{background:#F0F2F5;font-family:var(--body);color:var(--text);width:794px;m
       <div class="snap-unit">barrel · CRUDE10 JY26 {src_badge('wti')}</div>
       {spark_svg("wti", "#16A34A" if wti_chg>=0 else "#DC2626")}
     </div>
-    <div class="snap-card {'up' if brent_chg>=0 else 'dn'}-card">
-      <div class="snap-row1"><div class="snap-name">BRENT (BRENT10)</div><span class="snap-chg {'up' if brent_chg>=0 else 'dn'}">{chg_str(brent_chg)}</span></div>
-      <div class="snap-price">${brent_p:.2f}</div>
-      <div class="snap-unit">barrel · BRENT10 AU26 {src_badge('brent')}</div>
-      {spark_svg("brent", "#16A34A" if brent_chg>=0 else "#DC2626")}
-    </div>
     <div class="snap-card {'up' if natgas_chg>=0 else 'dn'}-card">
       <div class="snap-row1"><div class="snap-name">NAT GAS (NGAS1K)</div><span class="snap-chg {'up' if natgas_chg>=0 else 'dn'}">{chg_str(natgas_chg)}</span></div>
       <div class="snap-price">${natgas_p:.3f}</div>
       <div class="snap-unit">MMBtu · NGAS1K JY26 {src_badge('natgas')}</div>
       {spark_svg("natgas", "#16A34A" if natgas_chg>=0 else "#DC2626")}
-    </div>
-    <div class="snap-card {'up' if copper_chg>=0 else 'dn'}-card">
-      <div class="snap-row1"><div class="snap-name">COPPER</div><span class="snap-chg {'up' if copper_chg>=0 else 'dn'}">{chg_str(copper_chg)}</span></div>
-      <div class="snap-price">${copper_p:.3f}</div>
-      <div class="snap-unit">lb · COPPER JY26 {src_badge('copper')}</div>
-      {spark_svg("copper", "#16A34A" if copper_chg>=0 else "#DC2626")}
     </div>
     <div class="snap-card {'up' if sp_chg>=0 else 'dn'}-card">
       <div class="snap-row1"><div class="snap-name">S&amp;P 500</div><span class="snap-chg {'up' if sp_chg>=0 else 'dn'}">{chg_str(sp_chg)}</span></div>
@@ -1420,7 +1419,7 @@ body{{background:#F0F2F5;font-family:var(--body);color:var(--text);width:794px;m
     <span class="sec-title">Global Macro Dashboard</span>
     <span class="sec-meta">Live · Global context</span>
   </div>
-  <div class="macro-grid" style="margin-bottom:24px;">
+  <div class="macro-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px;">
     <div class="macro-card">
       <div class="macro-lbl">VIX · Fear Index</div>
       <div class="macro-val">{vix_p:.1f}</div>
@@ -1440,16 +1439,6 @@ body{{background:#F0F2F5;font-family:var(--body);color:var(--text);width:794px;m
       <div class="macro-lbl">US 10Y Treasury</div>
       <div class="macro-val">{us10y_p:.2f}%</div>
       <div class="macro-sub">Yield backdrop for Gold</div>
-    </div>
-    <div class="macro-card">
-      <div class="macro-lbl">S&amp;P 500 · US Equities</div>
-      <div class="macro-val">{sp_p:,.0f}</div>
-      <div class="macro-sub" style="color:{'var(--green)' if sp_chg>=0 else 'var(--neg)'};">{chg_str(sp_chg)} today</div>
-    </div>
-    <div class="macro-card">
-      <div class="macro-lbl">Nasdaq 100 · US Tech</div>
-      <div class="macro-val">{nq_p:,.0f}</div>
-      <div class="macro-sub" style="color:{'var(--green)' if nq_chg>=0 else 'var(--neg)'};">{chg_str(nq_chg)} today</div>
     </div>
   </div>
 
