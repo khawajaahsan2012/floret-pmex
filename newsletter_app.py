@@ -769,9 +769,7 @@ with col_right:
             margin_status = "ℹ️ No margins file uploaded — using default values"
 
         st.markdown(f'<div class="fc-status-ok">✅ Live data fetched · {len(data)} instruments loaded · {datetime.now().strftime("%H:%M PKT")}</div>', unsafe_allow_html=True)
-        pmex_count = sum(1 for v in price_source.values() if v == "PMEX") if margins else 0
-        margin_detail = f" · {pmex_count} PMEX ref prices applied" if pmex_count else ""
-        st.markdown(f'<div class="fc-status-ok" style="background:#EFF6FF;border-color:#3B82F6;">{margin_status}{margin_detail}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="fc-status-ok" style="background:#EFF6FF;border-color:#3B82F6;">{margin_status}</div>', unsafe_allow_html=True)
 
         # ── Live prices ──
         def safe(key, fallback=0.0, field="Close"):
@@ -840,6 +838,11 @@ with col_right:
               <div style="background:var(--dark);color:var(--amber);font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;padding:7px 12px;">{label}</div>
               {rows}
             </div>"""
+
+        # Show PMEX price count now that price_source is fully populated
+        pmex_count = sum(1 for v in price_source.values() if v == "PMEX")
+        if pmex_count:
+            st.markdown(f'<div class="fc-status-ok" style="background:#F0FDF4;border-color:#16A34A;">✅ {pmex_count} PMEX reference prices applied from margin file</div>', unsafe_allow_html=True)
 
         gold_chg   = pct_chg(data["gold"])   if "gold"   in data else 0.0
         silver_chg = pct_chg(data["silver"]) if "silver" in data else 0.0
