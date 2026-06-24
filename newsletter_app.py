@@ -109,6 +109,28 @@ def format_calendar_html(events):
       <tbody>{rows}</tbody>
     </table>"""
 
+def stance_label(bank, rate):
+    """Auto-derive central bank stance from current policy rate."""
+    if bank == "FED":
+        if rate >= 5.5: return "HAWKISH", "#FEE2E2", "#DC2626"
+        if rate >= 4.0: return "HOLDING", "#FEF3C7", "#92400E"
+        if rate >= 2.0: return "EASING",  "#DCFCE7", "#16A34A"
+        return "ACCOMMODATIVE", "#EFF6FF", "#1D4ED8"
+    elif bank == "ECB":
+        if rate >= 4.0: return "HAWKISH", "#FEE2E2", "#DC2626"
+        if rate >= 2.5: return "HOLDING", "#FEF3C7", "#92400E"
+        return "EASING", "#DCFCE7", "#16A34A"
+    elif bank == "BOJ":
+        if rate >= 1.0: return "HAWKISH", "#FEE2E2", "#DC2626"
+        if rate >= 0.25: return "HAWKISH", "#FEF3C7", "#92400E"
+        return "ACCOMMODATIVE", "#EFF6FF", "#1D4ED8"
+    elif bank == "SBP":
+        if rate >= 18: return "HAWKISH", "#FEE2E2", "#DC2626"
+        if rate >= 14: return "HOLDING", "#FEF3C7", "#92400E"
+        if rate >= 10: return "EASING",  "#DCFCE7", "#16A34A"
+        return "CUTTING", "#EFF6FF", "#1D4ED8"
+    return "NEUTRAL", "#FEF3C7", "#92400E"
+
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Floret Capitals — PMEX Newsletter Generator",
@@ -646,6 +668,14 @@ with col_left:
     with c2:
         ecb_rate = st.number_input("ECB (%)", value=2.00, step=0.25, format="%.2f")
         sbp_rate = st.number_input("SBP (%)", value=12.0, step=0.25, format="%.2f")
+    st.markdown('<span class="fc-section-label" style="margin-top:10px;">Next meeting dates <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#9CA3AF;">(optional)</span></span>', unsafe_allow_html=True)
+    c1, c2 = st.columns(2)
+    with c1:
+        fed_next = st.text_input("FED", value="", placeholder="e.g. Jul 30, 2026", label_visibility="collapsed")
+        boj_next = st.text_input("BOJ", value="", placeholder="e.g. Jun 17, 2026", label_visibility="collapsed")
+    with c2:
+        ecb_next = st.text_input("ECB", value="", placeholder="e.g. Jul 10, 2026", label_visibility="collapsed")
+        sbp_next = st.text_input("SBP", value="", placeholder="e.g. Jul 28, 2026", label_visibility="collapsed")
 
     st.markdown("---")
 
@@ -698,17 +728,17 @@ with col_right:
             v = get_val(data, key, field)
             return float(v) if v is not None else fallback
 
-        gold_p    = safe("gold",   4351.40)
-        silver_p  = safe("silver",   68.55)
-        wti_p     = safe("wti",      89.72)
-        brent_p   = safe("brent",    93.02)
-        natgas_p  = safe("natgas",    3.184)
-        copper_p  = safe("copper",    6.378)
-        sp_p      = safe("sp500",  7405.73)
-        nq_p      = safe("nasdaq",29414.26)
-        vix_p     = safe("vix",      18.2)
-        dxy_p     = safe("dxy",      99.9)
-        us10y_p   = safe("us10y",     4.55)
+        gold_p    = safe("gold",      0.0)
+        silver_p  = safe("silver",   0.0)
+        wti_p     = safe("wti",      0.0)
+        brent_p   = safe("brent",    0.0)
+        natgas_p  = safe("natgas",   0.0)
+        copper_p  = safe("copper",   0.0)
+        sp_p      = safe("sp500",    0.0)
+        nq_p      = safe("nasdaq",   0.0)
+        vix_p     = safe("vix",      0.0)
+        dxy_p     = safe("dxy",      0.0)
+        us10y_p   = safe("us10y",    0.0)
 
         gold_chg   = pct_chg(data["gold"])   if "gold"   in data else 0.36
         silver_chg = pct_chg(data["silver"]) if "silver" in data else 0.18
@@ -958,7 +988,7 @@ body{{background:#F0F2F5;font-family:var(--body);color:var(--text);width:794px;m
 .pkr-tag{{display:inline-block;font-size:8px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:var(--green2);color:var(--green);padding:1px 5px;margin-top:3px;}}
 
 /* SNAPSHOT */
-.snap-grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:24px;}}
+.snap-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:24px;}}
 .snap-card{{background:var(--white);border:1px solid var(--border);border-top:3px solid var(--grey3);padding:12px 12px 8px;}}
 .snap-card.up-card{{border-top-color:var(--green);}}
 .snap-card.dn-card{{border-top-color:var(--neg);}}
@@ -972,7 +1002,7 @@ body{{background:#F0F2F5;font-family:var(--body);color:var(--text);width:794px;m
 .sparkline{{width:100%;height:24px;margin-top:6px;display:block;}}
 
 /* MACRO */
-.macro-grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:24px;}}
+.macro-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:24px;}}
 .macro-card{{border:1px solid var(--border);padding:12px;text-align:center;background:var(--grey2);}}
 .macro-lbl{{font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}}
 .macro-val{{font-family:var(--mono);font-size:20px;font-weight:600;color:var(--dark);}}
@@ -1233,44 +1263,44 @@ body{{background:#F0F2F5;font-family:var(--body);color:var(--text);width:794px;m
       <div class="snap-price">${copper_p:.3f}</div><div class="snap-unit">lb · COPPER JY26</div>
       {spark_svg("copper", "#16A34A" if copper_chg>=0 else "#DC2626")}
     </div>
-    <div class="snap-card {'up' if sp_chg>=0 else 'dn'}-card">
-      <div class="snap-row1"><div class="snap-name">S&amp;P 500</div><span class="snap-chg {'up' if sp_chg>=0 else 'dn'}">{chg_str(sp_chg)}</span></div>
-      <div class="snap-price">{sp_p:,.2f}</div><div class="snap-unit">index · ^GSPC</div>
-      {spark_svg("sp500", "#16A34A" if sp_chg>=0 else "#DC2626")}
-    </div>
-    <div class="snap-card {'up' if nq_chg>=0 else 'dn'}-card">
-      <div class="snap-row1"><div class="snap-name">NASDAQ 100</div><span class="snap-chg {'up' if nq_chg>=0 else 'dn'}">{chg_str(nq_chg)}</span></div>
-      <div class="snap-price">{nq_p:,.2f}</div><div class="snap-unit">index · ^NDX</div>
-      {spark_svg("nasdaq", "#16A34A" if nq_chg>=0 else "#DC2626")}
-    </div>
   </div>
 
   <!-- MACRO -->
   <div class="sec-head">
     <span class="sec-tag">Macro</span>
     <span class="sec-title">Global Macro Dashboard</span>
-    <span class="sec-meta">Live</span>
+    <span class="sec-meta">Live · Global context</span>
   </div>
   <div class="macro-grid" style="margin-bottom:24px;">
     <div class="macro-card">
       <div class="macro-lbl">VIX · Fear Index</div>
       <div class="macro-val">{vix_p:.1f}</div>
-      <div class="macro-sub">{'▲ Low Volatility' if vix_p < 20 else '▲ Elevated Volatility' if vix_p < 30 else '▲ HIGH VOLATILITY'}</div>
+      <div class="macro-sub">{'Low Volatility' if vix_p < 20 else 'Elevated Volatility' if vix_p < 30 else 'HIGH VOLATILITY'}</div>
     </div>
     <div class="macro-card">
       <div class="macro-lbl">DXY · Dollar Index</div>
       <div class="macro-val">{dxy_p:.1f}</div>
-      <div class="macro-sub">{'▲ Dollar Weakness' if dxy_p < 100 else '▲ Dollar Strength'}</div>
+      <div class="macro-sub">{'Dollar Weakness' if dxy_p < 100 else 'Dollar Strength'}</div>
     </div>
     <div class="macro-card">
       <div class="macro-lbl">Gold / Silver Ratio</div>
       <div class="macro-val">{gs_ratio}x</div>
-      <div class="macro-sub">▲ Relative value</div>
+      <div class="macro-sub">Relative commodity value</div>
     </div>
     <div class="macro-card">
       <div class="macro-lbl">US 10Y Treasury</div>
       <div class="macro-val">{us10y_p:.2f}%</div>
-      <div class="macro-sub">▼ Yield backdrop</div>
+      <div class="macro-sub">Yield backdrop for Gold</div>
+    </div>
+    <div class="macro-card">
+      <div class="macro-lbl">S&amp;P 500 · US Equities</div>
+      <div class="macro-val">{sp_p:,.0f}</div>
+      <div class="macro-sub" style="color:{'var(--green)' if sp_chg>=0 else 'var(--neg)'};">{chg_str(sp_chg)} today</div>
+    </div>
+    <div class="macro-card">
+      <div class="macro-lbl">Nasdaq 100 · US Tech</div>
+      <div class="macro-val">{nq_p:,.0f}</div>
+      <div class="macro-sub" style="color:{'var(--green)' if nq_chg>=0 else 'var(--neg)'};">{chg_str(nq_chg)} today</div>
     </div>
   </div>
 
@@ -1311,37 +1341,37 @@ body{{background:#F0F2F5;font-family:var(--body);color:var(--text);width:794px;m
     <div class="cb-card">
       <div class="cb-name">FED</div><div class="cb-fullname">US Federal Reserve</div>
       <div class="cb-rate">{fed_rate:.2f}%</div>
-      <div class="cb-stance">EASING</div>
-      <div class="cb-next">Next: Jun 18</div>
-      <div class="cb-note">Rate path data-dependent. NFP is the key near-term catalyst.</div>
+      <div class="cb-stance" style="background:{stance_label('FED',fed_rate)[1]};color:{stance_label('FED',fed_rate)[2]};">{stance_label('FED',fed_rate)[0]}</div>
+      {f'<div class="cb-next">Next: {fed_next}</div>' if fed_next else ''}
+      <div class="cb-note">Rate path data-dependent. NFP &amp; CPI are key near-term catalysts.</div>
     </div>
     <div class="cb-card">
       <div class="cb-name">ECB</div><div class="cb-fullname">European Central Bank</div>
       <div class="cb-rate">{ecb_rate:.2f}%</div>
-      <div class="cb-stance">EASING</div>
-      <div class="cb-next">Next: Jul 10</div>
-      <div class="cb-note">Lagarde data-dependent; CPI flash shapes guidance.</div>
+      <div class="cb-stance" style="background:{stance_label('ECB',ecb_rate)[1]};color:{stance_label('ECB',ecb_rate)[2]};">{stance_label('ECB',ecb_rate)[0]}</div>
+      {f'<div class="cb-next">Next: {ecb_next}</div>' if ecb_next else ''}
+      <div class="cb-note">Lagarde data-dependent; Eurozone CPI flash shapes guidance.</div>
     </div>
     <div class="cb-card">
       <div class="cb-name">BOJ</div><div class="cb-fullname">Bank of Japan</div>
       <div class="cb-rate">{boj_rate:.2f}%</div>
-      <div class="cb-stance" style="background:#FEF3C7;color:#92400E;">HAWKISH</div>
-      <div class="cb-next">Next: Jun 20</div>
-      <div class="cb-note">Tightening bias amid rising CPI. Yen watch 142.00.</div>
+      <div class="cb-stance" style="background:{stance_label('BOJ',boj_rate)[1]};color:{stance_label('BOJ',boj_rate)[2]};">{stance_label('BOJ',boj_rate)[0]}</div>
+      {f'<div class="cb-next">Next: {boj_next}</div>' if boj_next else ''}
+      <div class="cb-note">Yen sensitivity to rate differentials; watch USD/JPY reaction.</div>
     </div>
     <div class="cb-card">
       <div class="cb-name">SBP</div><div class="cb-fullname">State Bank of Pakistan</div>
       <div class="cb-rate">{sbp_rate:.1f}%</div>
-      <div class="cb-stance">EASING</div>
-      <div class="cb-next">Next: Jun 26</div>
-      <div class="cb-note">Cutting cycle continues; PKR stable at {usd_pkr:.2f}.</div>
+      <div class="cb-stance" style="background:{stance_label('SBP',sbp_rate)[1]};color:{stance_label('SBP',sbp_rate)[2]};">{stance_label('SBP',sbp_rate)[0]}</div>
+      {f'<div class="cb-next">Next: {sbp_next}</div>' if sbp_next else ''}
+      <div class="cb-note">PKR rate at {usd_pkr:.2f}. Cutting cycle impacts cost of trading margins.</div>
     </div>
   </div>
 
   <!-- ANALYSIS -->
   <div class="sec-head">
     <span class="sec-tag">Analysis</span>
-    <span class="sec-title">Commodities &amp; Indices Deep Dive</span>
+    <span class="sec-title">PMEX Commodities Deep Dive</span>
     <span class="sec-meta">Live technicals · RSI / 50-DMA / {'weekly' if edition_type=='Weekly' else 'intraday'} levels</span>
   </div>
 
@@ -1414,40 +1444,6 @@ body{{background:#F0F2F5;font-family:var(--body);color:var(--text);width:794px;m
         </div>
       </div>
     </div>
-    <!-- S&P 500 -->
-    <div class="a-card">
-      <div class="a-top-band band-purp"></div>
-      <div class="a-body">
-        <div class="a-header">
-          <div><div class="a-name">S&amp;P 500</div><div class="a-sub">PMEX INDICES · US LARGE-CAP</div></div>
-          {bias_badge(T['sp500']['bias'])}
-        </div>
-        <p class="a-text">S&amp;P 500 is {'above' if T['sp500']['bias']=='BULLISH' else 'below'} its 50-day average, {'confirming a constructive trend' if T['sp500']['bias']=='BULLISH' else 'keeping the trend defensive'}. RSI at {T['sp500']['rsi']:.0f} {'is neutral' if 40<=T['sp500']['rsi']<=60 else 'signals oversold conditions' if T['sp500']['rsi']<40 else 'signals overbought conditions'}. {'Intraday' if edition_type=='Daily' else 'Weekly'} support sits at {T['sp500']['sup']:,.2f} with resistance at {T['sp500']['res']:,.2f}.</p>
-        <div class="a-levels">
-          <div class="lv"><div class="lv-lbl">Resistance</div><div class="lv-val lv-res">{T['sp500']['res']:,.2f}</div></div>
-          <div class="lv"><div class="lv-lbl">Spot</div><div class="lv-val lv-spot">{sp_p:,.2f}</div></div>
-          <div class="lv"><div class="lv-lbl">Support</div><div class="lv-val lv-sup">{T['sp500']['sup']:,.2f}</div></div>
-          <div class="lv"><div class="lv-lbl">{'50-DMA' if edition_type=='Weekly' else 'Pivot'}</div><div class="lv-val lv-piv">{T['sp500']['dma50' if edition_type=='Weekly' else 'pivot']:,.2f}</div></div>
-        </div>
-      </div>
-    </div>
-    <!-- NASDAQ -->
-    <div class="a-card">
-      <div class="a-top-band band-amber"></div>
-      <div class="a-body">
-        <div class="a-header">
-          <div><div class="a-name">Nasdaq 100</div><div class="a-sub">PMEX INDICES · US TECH</div></div>
-          {bias_badge(T['nasdaq']['bias'])}
-        </div>
-        <p class="a-text">Nasdaq 100 is {'above' if T['nasdaq']['bias']=='BULLISH' else 'below'} its 50-day average, {'confirming a constructive trend' if T['nasdaq']['bias']=='BULLISH' else 'keeping the trend defensive'}. RSI at {T['nasdaq']['rsi']:.0f} {'is neutral' if 40<=T['nasdaq']['rsi']<=60 else 'signals oversold conditions' if T['nasdaq']['rsi']<40 else 'signals overbought conditions'}. {'Intraday' if edition_type=='Daily' else 'Weekly'} support sits at {T['nasdaq']['sup']:,.2f} with resistance at {T['nasdaq']['res']:,.2f}.</p>
-        <div class="a-levels">
-          <div class="lv"><div class="lv-lbl">Resistance</div><div class="lv-val lv-res">{T['nasdaq']['res']:,.2f}</div></div>
-          <div class="lv"><div class="lv-lbl">Spot</div><div class="lv-val lv-spot">{nq_p:,.2f}</div></div>
-          <div class="lv"><div class="lv-lbl">Support</div><div class="lv-val lv-sup">{T['nasdaq']['sup']:,.2f}</div></div>
-          <div class="lv"><div class="lv-lbl">{'50-DMA' if edition_type=='Weekly' else 'Pivot'}</div><div class="lv-val lv-piv">{T['nasdaq']['dma50' if edition_type=='Weekly' else 'pivot']:,.2f}</div></div>
-        </div>
-      </div>
-    </div>
   </div>
 
   <!-- FX ANALYSIS -->
@@ -1501,9 +1497,9 @@ body{{background:#F0F2F5;font-family:var(--body);color:var(--text);width:794px;m
       </div>'''
       for name, sub, key, rsi, bias in [
         ("Gold","GO1OZ · RSI","gold",T['gold']['rsi'],T['gold']['bias']),
-        ("Crude","CRUDE10 · RSI","wti",T['wti']['rsi'],T['wti']['bias']),
-        ("S&P 500","INDEX · RSI","sp500",T['sp500']['rsi'],T['sp500']['bias']),
-        ("Nasdaq","INDEX · RSI","nasdaq",T['nasdaq']['rsi'],T['nasdaq']['bias']),
+        ("Crude Oil","CRUDE10 · RSI","wti",T['wti']['rsi'],T['wti']['bias']),
+        ("Silver","SL10 · RSI","silver",T['silver']['rsi'],T['silver']['bias']),
+        ("Natural Gas","NGAS1K · RSI","natgas",T['natgas']['rsi'],T['natgas']['bias']),
       ]
     ])}
   </div>
