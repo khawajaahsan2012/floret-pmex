@@ -611,12 +611,39 @@ NEWS_TICKERS = {
     "brent":  "BZ=F",
     "natgas": "NG=F",
     "copper": "HG=F",
+    "sp500":  "^GSPC",
+    "nasdaq": "^NDX",
 }
 
 def fmt_age(hours):
     if hours < 1:   return "< 1h ago"
     if hours < 24:  return f"{int(hours)}h ago"
     return f"{int(hours / 24)}d ago"
+
+def _parse_article(a, now_ts):
+    """Handle both old and new yfinance news structures. Returns (title, publisher, age_h) or None."""
+    # New yfinance structure (>= 0.2.50): article has 'content' dict
+    if "content" in a and isinstance(a["content"], dict):
+        c = a["content"]
+        title = (c.get("title") or "").strip()
+        publisher = ((c.get("provider") or {}).get("displayName") or "").strip()
+        pub_str = c.get("pubDate") or ""
+        age_h = 9999
+        if pub_str:
+            try:
+                pub_dt = datetime.fromisoformat(pub_str.replace("Z", "+00:00"))
+                age_h = (now_ts - pub_dt.timestamp()) / 3600
+            except Exception:
+                pass
+    else:
+        # Old yfinance structure: flat dict
+        title = (a.get("title") or "").strip()
+        publisher = (a.get("publisher") or "").strip()
+        pub = a.get("providerPublishTime", 0)
+        age_h = (now_ts - pub) / 3600 if pub else 9999
+    if not title or age_h > 168:
+        return None
+    return title, publisher, age_h
 
 @st.cache_data(ttl=3600)
 def fetch_news():
@@ -627,14 +654,10 @@ def fetch_news():
         try:
             articles = yf.Ticker(ticker).news or []
             items = []
-            for a in articles[:8]:
-                pub = a.get("providerPublishTime", 0)
-                age_h = (now_ts - pub) / 3600 if pub else 9999
-                if age_h > 168:   # skip anything older than 7 days
-                    continue
-                title = (a.get("title") or "").strip()
-                publisher = (a.get("publisher") or "").strip()
-                if title:
+            for a in articles[:12]:
+                parsed = _parse_article(a, now_ts)
+                if parsed:
+                    title, publisher, age_h = parsed
                     items.append({"title": title, "publisher": publisher, "age_hours": age_h})
                 if len(items) == 3:
                     break
@@ -797,17 +820,21 @@ with col_right:
             ("brent",  "BRENT10"),
             ("natgas", "NGAS1K"),
             ("copper", "COPPER"),
+            ("sp500",  "SP5"),
+            ("nasdaq", "NQ"),
         ]
         if margins:
             for key, prefix in pmex_map:
                 rp = get_ref_price(margins, prefix)
                 if rp:
-                    if key == "gold":    gold_p   = rp
-                    elif key == "silver": silver_p = rp
-                    elif key == "wti":    wti_p    = rp
-                    elif key == "brent":  brent_p  = rp
-                    elif key == "natgas": natgas_p = rp
-                    elif key == "copper": copper_p = rp
+                    if key == "gold":      gold_p   = rp
+                    elif key == "silver":  silver_p = rp
+                    elif key == "wti":     wti_p    = rp
+                    elif key == "brent":   brent_p  = rp
+                    elif key == "natgas":  natgas_p = rp
+                    elif key == "copper":  copper_p = rp
+                    elif key == "sp500":   sp_p     = rp
+                    elif key == "nasdaq":  nq_p     = rp
                     price_source[key] = "PMEX"
                 else:
                     price_source[key] = "MARKET"
@@ -1373,6 +1400,18 @@ body{{background:#F0F2F5;font-family:var(--body);color:var(--text);width:794px;m
       <div class="snap-unit">lb · COPPER JY26 {src_badge('copper')}</div>
       {spark_svg("copper", "#16A34A" if copper_chg>=0 else "#DC2626")}
     </div>
+    <div class="snap-card {'up' if sp_chg>=0 else 'dn'}-card">
+      <div class="snap-row1"><div class="snap-name">S&amp;P 500</div><span class="snap-chg {'up' if sp_chg>=0 else 'dn'}">{chg_str(sp_chg)}</span></div>
+      <div class="snap-price">{sp_p:,.0f}</div>
+      <div class="snap-unit">pts · SP500 index {src_badge('sp500')}</div>
+      {spark_svg("sp500", "#16A34A" if sp_chg>=0 else "#DC2626")}
+    </div>
+    <div class="snap-card {'up' if nq_chg>=0 else 'dn'}-card">
+      <div class="snap-row1"><div class="snap-name">NASDAQ 100</div><span class="snap-chg {'up' if nq_chg>=0 else 'dn'}">{chg_str(nq_chg)}</span></div>
+      <div class="snap-price">{nq_p:,.0f}</div>
+      <div class="snap-unit">pts · NQ100 index {src_badge('nasdaq')}</div>
+      {spark_svg("nasdaq", "#16A34A" if nq_chg>=0 else "#DC2626")}
+    </div>
   </div>
 
   <!-- MACRO -->
@@ -1600,11 +1639,15 @@ body{{background:#F0F2F5;font-family:var(--body);color:var(--text);width:794px;m
   <div style="background:#FFFBF0;border:1px solid rgba(227,158,61,.25);padding:7px 14px;margin-bottom:12px;font-size:10px;color:#92400E;">
     Headlines auto-fetched from financial news sources. For informational context only — not investment advice.
   </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:24px;">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:6px;">
     {news_col_html("GOLD · GO1OZ", "gold")}
     {news_col_html("WTI CRUDE · CRUDE10", "wti")}
     {news_col_html("SILVER · SL10", "silver")}
     {news_col_html("NATURAL GAS · NGAS1K", "natgas")}
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:24px;">
+    {news_col_html("S&amp;P 500 · US EQUITIES", "sp500")}
+    {news_col_html("NASDAQ 100 · US TECH", "nasdaq")}
   </div>
 
   <!-- SIGNAL SUMMARY -->
