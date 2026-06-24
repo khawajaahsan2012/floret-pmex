@@ -562,6 +562,15 @@ def parse_margins(uploaded_file):
     except Exception:
         return {}
 
+def get_ref_price(margins, prefix):
+    """Return PMEX reference/settlement price for a contract prefix, or None."""
+    for k, v in margins.items():
+        if k.upper().startswith(prefix.upper()):
+            rp = v.get("ref_price", 0)
+            if rp and float(rp) > 0:
+                return float(rp)
+    return None
+
 def get_margin(margins, code, default_pct, default_pkr):
     """Get margin values from parsed margins dict, fall back to defaults."""
     code_upper = code.upper()
@@ -594,6 +603,45 @@ def fetch_all():
         except Exception as e:
             errors.append(key)
     return data, errors
+
+NEWS_TICKERS = {
+    "gold":   "GC=F",
+    "silver": "SI=F",
+    "wti":    "CL=F",
+    "brent":  "BZ=F",
+    "natgas": "NG=F",
+    "copper": "HG=F",
+}
+
+def fmt_age(hours):
+    if hours < 1:   return "< 1h ago"
+    if hours < 24:  return f"{int(hours)}h ago"
+    return f"{int(hours / 24)}d ago"
+
+@st.cache_data(ttl=3600)
+def fetch_news():
+    """Fetch recent news headlines for PMEX commodities via yfinance."""
+    news_map = {}
+    now_ts = datetime.now().timestamp()
+    for key, ticker in NEWS_TICKERS.items():
+        try:
+            articles = yf.Ticker(ticker).news or []
+            items = []
+            for a in articles[:8]:
+                pub = a.get("providerPublishTime", 0)
+                age_h = (now_ts - pub) / 3600 if pub else 9999
+                if age_h > 168:   # skip anything older than 7 days
+                    continue
+                title = (a.get("title") or "").strip()
+                publisher = (a.get("publisher") or "").strip()
+                if title:
+                    items.append({"title": title, "publisher": publisher, "age_hours": age_h})
+                if len(items) == 3:
+                    break
+            news_map[key] = items
+        except Exception:
+            news_map[key] = []
+    return news_map
 
 def get_val(data, key, field="Close"):
     df = data.get(key)
@@ -721,7 +769,9 @@ with col_right:
             margin_status = "ℹ️ No margins file uploaded — using default values"
 
         st.markdown(f'<div class="fc-status-ok">✅ Live data fetched · {len(data)} instruments loaded · {datetime.now().strftime("%H:%M PKT")}</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="fc-status-ok" style="background:#EFF6FF;border-color:#3B82F6;">{margin_status}</div>', unsafe_allow_html=True)
+        pmex_count = sum(1 for v in price_source.values() if v == "PMEX") if margins else 0
+        margin_detail = f" · {pmex_count} PMEX ref prices applied" if pmex_count else ""
+        st.markdown(f'<div class="fc-status-ok" style="background:#EFF6FF;border-color:#3B82F6;">{margin_status}{margin_detail}</div>', unsafe_allow_html=True)
 
         # ── Live prices ──
         def safe(key, fallback=0.0, field="Close"):
@@ -740,14 +790,65 @@ with col_right:
         dxy_p     = safe("dxy",      0.0)
         us10y_p   = safe("us10y",    0.0)
 
-        gold_chg   = pct_chg(data["gold"])   if "gold"   in data else 0.36
-        silver_chg = pct_chg(data["silver"]) if "silver" in data else 0.18
-        wti_chg    = pct_chg(data["wti"])    if "wti"    in data else -1.73
-        brent_chg  = pct_chg(data["brent"])  if "brent"  in data else -1.31
-        natgas_chg = pct_chg(data["natgas"]) if "natgas" in data else 1.18
-        copper_chg = pct_chg(data["copper"]) if "copper" in data else 0.77
-        sp_chg     = pct_chg(data["sp500"])  if "sp500"  in data else 0.30
-        nq_chg     = pct_chg(data["nasdaq"]) if "nasdaq" in data else 1.58
+        # ── Override with PMEX reference prices from margin file ──
+        price_source = {}
+        pmex_map = [
+            ("gold",   "GO1OZ"),
+            ("silver", "SL10"),
+            ("wti",    "CRUDE10"),
+            ("brent",  "BRENT10"),
+            ("natgas", "NGAS1K"),
+            ("copper", "COPPER"),
+        ]
+        if margins:
+            for key, prefix in pmex_map:
+                rp = get_ref_price(margins, prefix)
+                if rp:
+                    if key == "gold":    gold_p   = rp
+                    elif key == "silver": silver_p = rp
+                    elif key == "wti":    wti_p    = rp
+                    elif key == "brent":  brent_p  = rp
+                    elif key == "natgas": natgas_p = rp
+                    elif key == "copper": copper_p = rp
+                    price_source[key] = "PMEX"
+                else:
+                    price_source[key] = "MARKET"
+        else:
+            for key, _ in pmex_map:
+                price_source[key] = "MARKET"
+
+        def src_badge(key):
+            if price_source.get(key) == "PMEX":
+                return '<span style="display:inline-block;font-size:7px;font-weight:700;letter-spacing:.1em;padding:1px 5px;background:#DCFCE7;color:#16A34A;margin-left:5px;vertical-align:middle;">PMEX</span>'
+            return '<span style="display:inline-block;font-size:7px;font-weight:700;letter-spacing:.1em;padding:1px 5px;background:#F3F4F6;color:#9CA3AF;margin-left:5px;vertical-align:middle;">LIVE</span>'
+
+        # ── Fetch news ──
+        with st.spinner("Fetching market news…"):
+            news_map = fetch_news()
+
+        def news_col_html(label, key):
+            items = news_map.get(key, [])
+            rows = ""
+            for a in items:
+                rows += f"""<div style="padding:9px 12px;border-bottom:1px solid var(--grey3);">
+                  <div style="font-size:11px;font-weight:600;color:var(--text);line-height:1.55;margin-bottom:3px;">{a['title']}</div>
+                  <div style="font-size:9px;color:var(--muted);letter-spacing:.04em;">{a['publisher']} &nbsp;·&nbsp; {fmt_age(a['age_hours'])}</div>
+                </div>"""
+            if not rows:
+                rows = '<div style="padding:14px 12px;font-size:11px;color:var(--muted);text-align:center;">No recent news found.</div>'
+            return f"""<div style="border:1px solid var(--border);overflow:hidden;margin-bottom:0;">
+              <div style="background:var(--dark);color:var(--amber);font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;padding:7px 12px;">{label}</div>
+              {rows}
+            </div>"""
+
+        gold_chg   = pct_chg(data["gold"])   if "gold"   in data else 0.0
+        silver_chg = pct_chg(data["silver"]) if "silver" in data else 0.0
+        wti_chg    = pct_chg(data["wti"])    if "wti"    in data else 0.0
+        brent_chg  = pct_chg(data["brent"])  if "brent"  in data else 0.0
+        natgas_chg = pct_chg(data["natgas"]) if "natgas" in data else 0.0
+        copper_chg = pct_chg(data["copper"]) if "copper" in data else 0.0
+        sp_chg     = pct_chg(data["sp500"])  if "sp500"  in data else 0.0
+        nq_chg     = pct_chg(data["nasdaq"]) if "nasdaq" in data else 0.0
 
         gs_ratio   = round(gold_p / silver_p, 1) if silver_p else 63.5
 
@@ -1203,7 +1304,7 @@ body{{background:#F0F2F5;font-family:var(--body);color:var(--text);width:794px;m
     <div class="pull-icon">■</div>
     <div>
       <div class="pull-text" style="font-style:normal;font-size:12px;line-height:1.8;">
-        <strong style="color:var(--amber);">{brief_type.upper()} EXECUTIVE SUMMARY · AUTO-GENERATED FROM LIVE DATA</strong><br/>
+        <strong style="color:var(--amber);">{brief_type.upper()} EXECUTIVE SUMMARY · {'PMEX + LIVE DATA' if any(v=='PMEX' for v in price_source.values()) else 'LIVE MARKET DATA'}</strong><br/>
         Gold <strong>${gold_p:,.2f}</strong> ({chg_str(gold_chg)}) — {'trend soft below 50-DMA.' if T['gold']['bias']=='BEARISH' else 'trend constructive above 50-DMA.'} GO1OZ AU26.<br/>
         WTI <strong>${wti_p:.2f}</strong> ({chg_str(wti_chg)}) — {'under pressure.' if wti_chg < 0 else 'gaining momentum.'} CRUDE10 JY26.<br/>
         DXY {dxy_p:.1f} · VIX {vix_p:.1f} — dollar &amp; volatility backdrop {'supportive' if dxy_p < 100 else 'headwind'} for commodities.<br/>
@@ -1235,32 +1336,38 @@ body{{background:#F0F2F5;font-family:var(--body);color:var(--text);width:794px;m
   <div class="snap-grid">
     <div class="snap-card {'up' if gold_chg>=0 else 'dn'}-card">
       <div class="snap-row1"><div class="snap-name">GOLD (GO1OZ)</div><span class="snap-chg {'up' if gold_chg>=0 else 'dn'}">{chg_str(gold_chg)}</span></div>
-      <div class="snap-price">${gold_p:,.2f}</div><div class="snap-unit">troy oz · GO1OZ AU26</div>
+      <div class="snap-price">${gold_p:,.2f}</div>
+      <div class="snap-unit">troy oz · GO1OZ AU26 {src_badge('gold')}</div>
       {spark_svg("gold", "#E39E3D" if gold_chg>=0 else "#DC2626")}
     </div>
     <div class="snap-card {'up' if silver_chg>=0 else 'dn'}-card">
       <div class="snap-row1"><div class="snap-name">SILVER (SL10)</div><span class="snap-chg {'up' if silver_chg>=0 else 'dn'}">{chg_str(silver_chg)}</span></div>
-      <div class="snap-price">${silver_p:.2f}</div><div class="snap-unit">troy oz · SL10 JY26</div>
+      <div class="snap-price">${silver_p:.2f}</div>
+      <div class="snap-unit">troy oz · SL10 JY26 {src_badge('silver')}</div>
       {spark_svg("silver", "#16A34A" if silver_chg>=0 else "#DC2626")}
     </div>
     <div class="snap-card {'up' if wti_chg>=0 else 'dn'}-card">
       <div class="snap-row1"><div class="snap-name">WTI (CRUDE10)</div><span class="snap-chg {'up' if wti_chg>=0 else 'dn'}">{chg_str(wti_chg)}</span></div>
-      <div class="snap-price">${wti_p:.2f}</div><div class="snap-unit">barrel · CRUDE10 JY26</div>
+      <div class="snap-price">${wti_p:.2f}</div>
+      <div class="snap-unit">barrel · CRUDE10 JY26 {src_badge('wti')}</div>
       {spark_svg("wti", "#16A34A" if wti_chg>=0 else "#DC2626")}
     </div>
     <div class="snap-card {'up' if brent_chg>=0 else 'dn'}-card">
       <div class="snap-row1"><div class="snap-name">BRENT (BRENT10)</div><span class="snap-chg {'up' if brent_chg>=0 else 'dn'}">{chg_str(brent_chg)}</span></div>
-      <div class="snap-price">${brent_p:.2f}</div><div class="snap-unit">barrel · BRENT10 AU26</div>
+      <div class="snap-price">${brent_p:.2f}</div>
+      <div class="snap-unit">barrel · BRENT10 AU26 {src_badge('brent')}</div>
       {spark_svg("brent", "#16A34A" if brent_chg>=0 else "#DC2626")}
     </div>
     <div class="snap-card {'up' if natgas_chg>=0 else 'dn'}-card">
       <div class="snap-row1"><div class="snap-name">NAT GAS (NGAS1K)</div><span class="snap-chg {'up' if natgas_chg>=0 else 'dn'}">{chg_str(natgas_chg)}</span></div>
-      <div class="snap-price">${natgas_p:.3f}</div><div class="snap-unit">MMBtu · NGAS1K JY26</div>
+      <div class="snap-price">${natgas_p:.3f}</div>
+      <div class="snap-unit">MMBtu · NGAS1K JY26 {src_badge('natgas')}</div>
       {spark_svg("natgas", "#16A34A" if natgas_chg>=0 else "#DC2626")}
     </div>
     <div class="snap-card {'up' if copper_chg>=0 else 'dn'}-card">
       <div class="snap-row1"><div class="snap-name">COPPER</div><span class="snap-chg {'up' if copper_chg>=0 else 'dn'}">{chg_str(copper_chg)}</span></div>
-      <div class="snap-price">${copper_p:.3f}</div><div class="snap-unit">lb · COPPER JY26</div>
+      <div class="snap-price">${copper_p:.3f}</div>
+      <div class="snap-unit">lb · COPPER JY26 {src_badge('copper')}</div>
       {spark_svg("copper", "#16A34A" if copper_chg>=0 else "#DC2626")}
     </div>
   </div>
@@ -1479,6 +1586,22 @@ body{{background:#F0F2F5;font-family:var(--body);color:var(--text);width:794px;m
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- MARKET INTELLIGENCE -->
+  <div class="sec-head">
+    <span class="sec-tag">In the News</span>
+    <span class="sec-title">Market Intelligence</span>
+    <span class="sec-meta">Auto-fetched · Last 7 days</span>
+  </div>
+  <div style="background:#FFFBF0;border:1px solid rgba(227,158,61,.25);padding:7px 14px;margin-bottom:12px;font-size:10px;color:#92400E;">
+    Headlines auto-fetched from financial news sources. For informational context only — not investment advice.
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:24px;">
+    {news_col_html("GOLD · GO1OZ", "gold")}
+    {news_col_html("WTI CRUDE · CRUDE10", "wti")}
+    {news_col_html("SILVER · SL10", "silver")}
+    {news_col_html("NATURAL GAS · NGAS1K", "natgas")}
   </div>
 
   <!-- SIGNAL SUMMARY -->
