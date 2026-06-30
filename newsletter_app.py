@@ -44,7 +44,7 @@ def pmex_label(title):
 
 @st.cache_data(ttl=3600)
 def fetch_calendar():
-    """Fetch ForexFactory high-impact calendar — same feed as original Worker."""
+    """Fetch ForexFactory high + medium impact calendar."""
     UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
     events = []
     for rng in ["thisweek", "nextweek"]:
@@ -59,7 +59,7 @@ def fetch_calendar():
                 for e in data:
                     imp = (e.get("impact") or "").lower()
                     title = e.get("title") or ""
-                    if imp == "high" or any(k in title.lower() for k in KW_HIGH):
+                    if imp in ("high", "medium") or any(k in title.lower() for k in KW_HIGH):
                         events.append(e)
                 break
         except Exception:
@@ -94,7 +94,7 @@ def format_calendar_html(events):
           <td style="font-weight:600;font-size:11px;color:var(--dark);">{title}</td>
           <td style="font-family:var(--mono);font-size:10px;">{prev}</td>
           <td style="font-family:var(--mono);font-size:10px;color:var(--amber);font-weight:700;">{est}</td>
-          <td><span class="imp-h">HIGH</span></td>
+          <td><span class="{'imp-h' if (e.get('impact') or '').lower() == 'high' else 'imp-m'}">{'HIGH' if (e.get('impact') or '').lower() == 'high' else 'MED'}</span></td>
           <td style="font-size:9px;color:var(--muted);font-weight:600;">{pmex}</td>
         </tr>"""
     return f"""
