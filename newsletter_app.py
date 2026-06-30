@@ -562,14 +562,35 @@ def parse_margins(uploaded_file):
     except Exception:
         return {}
 
+_PMEX_MONTH = {
+    "JA":"JAN","FB":"FEB","MR":"MAR","AP":"APR","MY":"MAY","JN":"JUN",
+    "JY":"JUL","AU":"AUG","SE":"SEP","OC":"OCT","NO":"NOV","DC":"DEC",
+}
+
+def month_lbl(code):
+    """'SL10 SE26' → 'SEP 2026' for display in section headers."""
+    parts = code.strip().split()
+    if len(parts) >= 2:
+        m = parts[-1]
+        if len(m) == 4 and m[:2] in _PMEX_MONTH:
+            return f"{_PMEX_MONTH[m[:2]]} 20{m[2:]}"
+    return code
+
 def get_ref_price(margins, prefix):
-    """Return PMEX reference/settlement price for a contract prefix, or None."""
+    """Return (price, contract_code) for the best non-intraday contract matching prefix.
+    Skips any key ending in 'ID'. Returns (None, None) if not found."""
+    best_price, best_code = None, None
     for k, v in margins.items():
-        if k.upper().startswith(prefix.upper()):
-            rp = v.get("ref_price", 0)
-            if rp and float(rp) > 0:
-                return float(rp)
-    return None
+        ku = k.upper().strip()
+        if not ku.startswith(prefix.upper()):
+            continue
+        if ku.split()[-1].endswith("ID"):
+            continue  # skip intraday
+        rp = v.get("ref_price", 0)
+        if rp and float(rp) > 0:
+            if best_code is None or len(k) < len(best_code):
+                best_price, best_code = float(rp), k.strip()
+    return best_price, best_code
 
 def get_margin(margins, code, default_pct, default_pkr):
     """Get margin values from parsed margins dict, fall back to defaults."""
@@ -588,7 +609,6 @@ def get_margin(margins, code, default_pct, default_pkr):
             return pct, pkr
     return default_pct, default_pkr
 
-@st.cache_data(ttl=300)
 @st.cache_data(ttl=300)
 def fetch_all():
     data = {}
@@ -834,9 +854,10 @@ with col_right:
             ("sp500",  "SP5"),
             ("nasdaq", "NSDQ100"),
         ]
+        contract_code = {}   # key → actual PMEX contract code from margin file
         if margins:
             for key, prefix in pmex_map:
-                rp = get_ref_price(margins, prefix)
+                rp, code = get_ref_price(margins, prefix)
                 if rp:
                     if key == "gold":      gold_p   = rp
                     elif key == "silver":  silver_p = rp
@@ -847,11 +868,21 @@ with col_right:
                     elif key == "sp500":   sp_p     = rp
                     elif key == "nasdaq":  nq_p     = rp
                     price_source[key] = "PMEX"
+                    contract_code[key] = code
                 else:
                     price_source[key] = "MARKET"
         else:
             for key, _ in pmex_map:
                 price_source[key] = "MARKET"
+
+        # ── Contract display names (from margin file or sensible defaults) ──
+        _cn_defaults = {
+            "gold":"GO1OZ","silver":"SL10","wti":"CRUDE10","brent":"BRENT10",
+            "natgas":"NGAS1K","sp500":"SP500","nasdaq":"NSDQ100",
+        }
+        cn  = {k: contract_code.get(k, _cn_defaults[k]) for k in _cn_defaults}
+        def cn_b(key):
+            return cn[key].split()[0]  # base code without month, e.g. 'SL10'
 
         def src_badge(key):
             if price_source.get(key) == "PMEX":
@@ -1034,9 +1065,9 @@ with col_right:
 
             lvl_word = "weekly" if edition_type == "Weekly" else "intraday"
             return title, body, f"""
-            <li>Gold GO1OZ: Trend {'soft' if T['gold']['bias']=='BEARISH' else 'constructive'} — be selective; watch ${T['gold']['sup']:,.2f} support. Margin 5.75%.</li>
-            <li>WTI CRUDE10: {'Under pressure' if wti_chg < 0 else 'Recovering'} — rallies toward ${T['wti']['res']:,.2f} may offer {'shorts' if wti_chg < 0 else 'longs'}. Margin 17%.</li>
-            <li>Silver SL10: Gold/Silver ratio at {gs_ratio}x. Support ${T['silver']['sup']:,.2f}, resistance ${T['silver']['res']:,.2f}.</li>
+            <li>Gold {cn_b('gold')}: Trend {'soft' if T['gold']['bias']=='BEARISH' else 'constructive'} — be selective; watch ${T['gold']['sup']:,.2f} support. Margin 5.75%.</li>
+            <li>WTI {cn_b('wti')}: {'Under pressure' if wti_chg < 0 else 'Recovering'} — rallies toward ${T['wti']['res']:,.2f} may offer {'shorts' if wti_chg < 0 else 'longs'}. Margin 17%.</li>
+            <li>Silver {cn_b('silver')}: Gold/Silver ratio at {gs_ratio}x. Support ${T['silver']['sup']:,.2f}, resistance ${T['silver']['res']:,.2f}.</li>
             <li>Risk management: Widen stops 20–30% around high-impact releases. Size to PMEX margins shown in specs. Avoid max leverage in volatile windows.</li>"""
 
         def _build_calendar(etype, _unused=""):
@@ -1354,8 +1385,8 @@ body{{background:#F0F2F5;font-family:var(--body);color:var(--text);width:794px;m
     <div>
       <div class="pull-text" style="font-style:normal;font-size:12px;line-height:1.8;">
         <strong style="color:var(--amber);">{brief_type.upper()} EXECUTIVE SUMMARY · {'PMEX + LIVE DATA' if any(v=='PMEX' for v in price_source.values()) else 'LIVE MARKET DATA'}</strong><br/>
-        Gold <strong>${gold_p:,.2f}</strong> ({chg_str(gold_chg)}) — {'trend soft below 50-DMA.' if T['gold']['bias']=='BEARISH' else 'trend constructive above 50-DMA.'} GO1OZ AU26.<br/>
-        WTI <strong>${wti_p:.2f}</strong> ({chg_str(wti_chg)}) — {'under pressure.' if wti_chg < 0 else 'gaining momentum.'} CRUDE10 JY26.<br/>
+        Gold <strong>${gold_p:,.2f}</strong> ({chg_str(gold_chg)}) — {'trend soft below 50-DMA.' if T['gold']['bias']=='BEARISH' else 'trend constructive above 50-DMA.'} {cn['gold']}.<br/>
+        WTI <strong>${wti_p:.2f}</strong> ({chg_str(wti_chg)}) — {'under pressure.' if wti_chg < 0 else 'gaining momentum.'} {cn['wti']}.<br/>
         DXY {dxy_p:.1f} · VIX {vix_p:.1f} — dollar &amp; volatility backdrop {'supportive' if dxy_p < 100 else 'headwind'} for commodities.<br/>
         Gold/Silver {gs_ratio}x · US 10Y {us10y_p:.2f}% — USD/PKR {usd_pkr:.2f}. Silver ${silver_p:.2f}.
       </div>
@@ -1384,27 +1415,27 @@ body{{background:#F0F2F5;font-family:var(--body);color:var(--text);width:794px;m
   </div>
   <div class="snap-grid">
     <div class="snap-card {'up' if gold_chg>=0 else 'dn'}-card">
-      <div class="snap-row1"><div class="snap-name">GOLD (GO1OZ)</div><span class="snap-chg {'up' if gold_chg>=0 else 'dn'}">{chg_str(gold_chg)}</span></div>
+      <div class="snap-row1"><div class="snap-name">GOLD ({cn_b('gold')})</div><span class="snap-chg {'up' if gold_chg>=0 else 'dn'}">{chg_str(gold_chg)}</span></div>
       <div class="snap-price">${gold_p:,.2f}</div>
-      <div class="snap-unit">troy oz · GO1OZ AU26 {src_badge('gold')}</div>
+      <div class="snap-unit">troy oz · {cn['gold']} {src_badge('gold')}</div>
       {spark_svg("gold", "#E39E3D" if gold_chg>=0 else "#DC2626")}
     </div>
     <div class="snap-card {'up' if silver_chg>=0 else 'dn'}-card">
-      <div class="snap-row1"><div class="snap-name">SILVER (SL10)</div><span class="snap-chg {'up' if silver_chg>=0 else 'dn'}">{chg_str(silver_chg)}</span></div>
+      <div class="snap-row1"><div class="snap-name">SILVER ({cn_b('silver')})</div><span class="snap-chg {'up' if silver_chg>=0 else 'dn'}">{chg_str(silver_chg)}</span></div>
       <div class="snap-price">${silver_p:.2f}</div>
-      <div class="snap-unit">troy oz · SL10 JY26 {src_badge('silver')}</div>
+      <div class="snap-unit">troy oz · {cn['silver']} {src_badge('silver')}</div>
       {spark_svg("silver", "#16A34A" if silver_chg>=0 else "#DC2626")}
     </div>
     <div class="snap-card {'up' if wti_chg>=0 else 'dn'}-card">
-      <div class="snap-row1"><div class="snap-name">WTI (CRUDE10)</div><span class="snap-chg {'up' if wti_chg>=0 else 'dn'}">{chg_str(wti_chg)}</span></div>
+      <div class="snap-row1"><div class="snap-name">WTI ({cn_b('wti')})</div><span class="snap-chg {'up' if wti_chg>=0 else 'dn'}">{chg_str(wti_chg)}</span></div>
       <div class="snap-price">${wti_p:.2f}</div>
-      <div class="snap-unit">barrel · CRUDE10 JY26 {src_badge('wti')}</div>
+      <div class="snap-unit">barrel · {cn['wti']} {src_badge('wti')}</div>
       {spark_svg("wti", "#16A34A" if wti_chg>=0 else "#DC2626")}
     </div>
     <div class="snap-card {'up' if natgas_chg>=0 else 'dn'}-card">
-      <div class="snap-row1"><div class="snap-name">NAT GAS (NGAS1K)</div><span class="snap-chg {'up' if natgas_chg>=0 else 'dn'}">{chg_str(natgas_chg)}</span></div>
+      <div class="snap-row1"><div class="snap-name">NAT GAS ({cn_b('natgas')})</div><span class="snap-chg {'up' if natgas_chg>=0 else 'dn'}">{chg_str(natgas_chg)}</span></div>
       <div class="snap-price">${natgas_p:.3f}</div>
-      <div class="snap-unit">MMBtu · NGAS1K JY26 {src_badge('natgas')}</div>
+      <div class="snap-unit">MMBtu · {cn['natgas']} {src_badge('natgas')}</div>
       {spark_svg("natgas", "#16A34A" if natgas_chg>=0 else "#DC2626")}
     </div>
     <div class="snap-card {'up' if sp_chg>=0 else 'dn'}-card">
@@ -1527,7 +1558,7 @@ body{{background:#F0F2F5;font-family:var(--body);color:var(--text);width:794px;m
       <div class="a-top-band band-amber"></div>
       <div class="a-body">
         <div class="a-header">
-          <div><div class="a-name">Gold · GO1OZ AU26</div><div class="a-sub">PMEX · COMEX LINKED · AUG 2026</div></div>
+          <div><div class="a-name">Gold · {cn['gold']}</div><div class="a-sub">PMEX · COMEX LINKED · {month_lbl(cn['gold'])}</div></div>
           {bias_badge(T['gold']['bias'])}
         </div>
         <p class="a-text">Gold is {'below' if T['gold']['bias']=='BEARISH' else 'above'} its 50-day average, keeping the trend {'defensive' if T['gold']['bias']=='BEARISH' else 'constructive'}. RSI at {T['gold']['rsi']:.0f} {'is neutral' if 40<=T['gold']['rsi']<=60 else 'signals oversold conditions — a bounce is possible' if T['gold']['rsi']<40 else 'signals overbought conditions — watch for a pullback'}. {'Intraday' if edition_type=='Daily' else 'Weekly'} support sits at ${T['gold']['sup']:,.2f} with resistance at ${T['gold']['res']:,.2f}.</p>
@@ -1544,7 +1575,7 @@ body{{background:#F0F2F5;font-family:var(--body);color:var(--text);width:794px;m
       <div class="a-top-band band-red"></div>
       <div class="a-body">
         <div class="a-header">
-          <div><div class="a-name">WTI Crude · CRUDE10 JY26</div><div class="a-sub">PMEX · NYMEX LINKED · JUL 2026</div></div>
+          <div><div class="a-name">WTI Crude · {cn['wti']}</div><div class="a-sub">PMEX · NYMEX LINKED · {month_lbl(cn['wti'])}</div></div>
           {bias_badge(T['wti']['bias'])}
         </div>
         <p class="a-text">WTI Crude is {'below' if T['wti']['bias'] in ('BEARISH','OVERSOLD') else 'above'} its 50-day average, keeping the trend {'defensive' if T['wti']['bias'] in ('BEARISH','OVERSOLD') else 'constructive'}. RSI at {T['wti']['rsi']:.0f} {'signals oversold conditions — a bounce is possible' if T['wti']['rsi']<30 else 'is neutral' if 40<=T['wti']['rsi']<=60 else 'signals overbought conditions'}. {'Intraday' if edition_type=='Daily' else 'Weekly'} support sits at ${T['wti']['sup']:.2f} with resistance at ${T['wti']['res']:.2f}.</p>
@@ -1561,7 +1592,7 @@ body{{background:#F0F2F5;font-family:var(--body);color:var(--text);width:794px;m
       <div class="a-top-band band-blue"></div>
       <div class="a-body">
         <div class="a-header">
-          <div><div class="a-name">Silver · SL10 JY26</div><div class="a-sub">PMEX · COMEX LINKED · JUL 2026</div></div>
+          <div><div class="a-name">Silver · {cn['silver']}</div><div class="a-sub">PMEX · COMEX LINKED · {month_lbl(cn['silver'])}</div></div>
           {bias_badge(T['silver']['bias'])}
         </div>
         <p class="a-text">Silver is {'below' if T['silver']['bias'] in ('BEARISH','OVERSOLD') else 'above'} its 50-day average, keeping the trend {'defensive' if T['silver']['bias'] in ('BEARISH','OVERSOLD') else 'constructive'}. RSI at {T['silver']['rsi']:.0f} {'signals oversold conditions — a bounce is possible' if T['silver']['rsi']<30 else 'is neutral'}. {'Intraday' if edition_type=='Daily' else 'Weekly'} support sits at ${T['silver']['sup']:.2f} with resistance at ${T['silver']['res']:.2f}.</p>
@@ -1578,7 +1609,7 @@ body{{background:#F0F2F5;font-family:var(--body);color:var(--text);width:794px;m
       <div class="a-top-band band-green"></div>
       <div class="a-body">
         <div class="a-header">
-          <div><div class="a-name">Natural Gas · NGAS1K JY26</div><div class="a-sub">PMEX · HENRY HUB · JUL 2026</div></div>
+          <div><div class="a-name">Natural Gas · {cn['natgas']}</div><div class="a-sub">PMEX · HENRY HUB · {month_lbl(cn['natgas'])}</div></div>
           {bias_badge(T['natgas']['bias'])}
         </div>
         <p class="a-text">Natural Gas is {'above' if T['natgas']['bias']=='BULLISH' else 'below'} its 50-day average, {'confirming a constructive trend' if T['natgas']['bias']=='BULLISH' else 'keeping the trend defensive'}. RSI at {T['natgas']['rsi']:.0f} {'is neutral' if 40<=T['natgas']['rsi']<=60 else 'signals oversold conditions' if T['natgas']['rsi']<40 else 'signals overbought conditions'}. {'Intraday' if edition_type=='Daily' else 'Weekly'} support sits at ${T['natgas']['sup']:.3f} with resistance at ${T['natgas']['res']:.3f}.</p>
@@ -1637,10 +1668,10 @@ body{{background:#F0F2F5;font-family:var(--body);color:var(--text);width:794px;m
     Headlines auto-fetched from financial news sources. For informational context only — not investment advice.
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:6px;">
-    {news_col_html("GOLD · GO1OZ", "gold")}
-    {news_col_html("WTI CRUDE · CRUDE10", "wti")}
-    {news_col_html("SILVER · SL10", "silver")}
-    {news_col_html("NATURAL GAS · NGAS1K", "natgas")}
+    {news_col_html(f"GOLD · {cn_b('gold')}", "gold")}
+    {news_col_html(f"WTI CRUDE · {cn_b('wti')}", "wti")}
+    {news_col_html(f"SILVER · {cn_b('silver')}", "silver")}
+    {news_col_html(f"NATURAL GAS · {cn_b('natgas')}", "natgas")}
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:24px;">
     {news_col_html("S&amp;P 500 · US EQUITIES", "sp500")}
@@ -1662,10 +1693,10 @@ body{{background:#F0F2F5;font-family:var(--body);color:var(--text);width:794px;m
         <div style="font-size:9px;color:var(--muted);margin-top:4px;">RSI {rsi:.0f} · {'Above' if bias in ('BULLISH','OVERBOUGHT') else 'Below'} 50-DMA</div>
       </div>'''
       for name, sub, key, rsi, bias in [
-        ("Gold","GO1OZ · RSI","gold",T['gold']['rsi'],T['gold']['bias']),
-        ("Crude Oil","CRUDE10 · RSI","wti",T['wti']['rsi'],T['wti']['bias']),
-        ("Silver","SL10 · RSI","silver",T['silver']['rsi'],T['silver']['bias']),
-        ("Natural Gas","NGAS1K · RSI","natgas",T['natgas']['rsi'],T['natgas']['bias']),
+        ("Gold",f"{cn_b('gold')} · RSI","gold",T['gold']['rsi'],T['gold']['bias']),
+        ("Crude Oil",f"{cn_b('wti')} · RSI","wti",T['wti']['rsi'],T['wti']['bias']),
+        ("Silver",f"{cn_b('silver')} · RSI","silver",T['silver']['rsi'],T['silver']['bias']),
+        ("Natural Gas",f"{cn_b('natgas')} · RSI","natgas",T['natgas']['rsi'],T['natgas']['bias']),
       ]
     ])}
   </div>
@@ -1716,38 +1747,38 @@ body{{background:#F0F2F5;font-family:var(--body);color:var(--text);width:794px;m
     <span class="sec-meta">Regular · Intraday</span>
   </div>
 
-  <div class="specs-section-head">✦ Gold (XAU) — Base: GO1OZ AUG 2026 · ${gold_p:,.2f} / OZ</div>
+  <div class="specs-section-head">✦ Gold (XAU) — Base: {cn['gold']} · ${gold_p:,.2f} / OZ</div>
   <table class="specs-table">
     <thead><tr><th>Contract Code</th><th>Description</th><th>Size</th><th>Price</th><th>Tola Equiv.</th><th>Margin (PKR)</th><th>%</th></tr></thead>
     <tbody>
-      <tr><td>GO1OZ AU26</td><td>Gold — 1 Troy Ounce</td><td>1 oz</td><td>${gold_p:,.2f}</td><td>2.667 tola</td><td>{get_margin(margins,"GO1OZ AU26",0.0575,69800)[1]:,}</td><td>{get_margin(margins,"GO1OZ AU26",0.0575,69800)[0]*100:.2f}%</td></tr>
-      <tr><td>GO1OZ AU26 ID</td><td>Gold 1 Oz INTRADAY</td><td>1 oz</td><td>${gold_p:,.2f}</td><td>2.667 tola</td><td>{get_margin(margins,"GO1OZ AU26ID",0.03,36400)[1]:,}</td><td>{get_margin(margins,"GO1OZ AU26ID",0.03,36400)[0]*100:.2f}%</td></tr>
+      <tr><td>{cn['gold']}</td><td>Gold — 1 Troy Ounce</td><td>1 oz</td><td>${gold_p:,.2f}</td><td>2.667 tola</td><td>{get_margin(margins,cn['gold'],0.0575,69800)[1]:,}</td><td>{get_margin(margins,cn['gold'],0.0575,69800)[0]*100:.2f}%</td></tr>
+      <tr><td>{cn['gold']} ID</td><td>Gold 1 Oz INTRADAY</td><td>1 oz</td><td>${gold_p:,.2f}</td><td>2.667 tola</td><td>{get_margin(margins,cn['gold']+"ID",0.03,36400)[1]:,}</td><td>{get_margin(margins,cn['gold']+"ID",0.03,36400)[0]*100:.2f}%</td></tr>
     </tbody>
   </table>
 
-  <div class="specs-section-head">◈ Silver (XAG) — Base: SL10 JUL 2026 · ${silver_p:.2f} / OZ</div>
+  <div class="specs-section-head">◈ Silver (XAG) — Base: {cn['silver']} · ${silver_p:.2f} / OZ</div>
   <table class="specs-table">
     <thead><tr><th>Contract Code</th><th>Description</th><th>Size</th><th>Price</th><th>Tola Equiv.</th><th>Margin (PKR)</th><th>%</th></tr></thead>
     <tbody>
-      <tr><td>SL10 JY26</td><td>Silver — 10 Troy Oz</td><td>10 oz</td><td>${silver_p:.2f}</td><td>26.67 tola</td><td>{get_margin(margins,"SL10 JY26",0.11,21000)[1]:,}</td><td>{get_margin(margins,"SL10 JY26",0.11,21000)[0]*100:.2f}%</td></tr>
-      <tr><td>SL10 JY26 ID</td><td>Silver 10 Oz INTRADAY</td><td>10 oz</td><td>${silver_p:.2f}</td><td>26.67 tola</td><td>{get_margin(margins,"SL10 JY26ID",0.055,10500)[1]:,}</td><td>{get_margin(margins,"SL10 JY26ID",0.055,10500)[0]*100:.2f}%</td></tr>
+      <tr><td>{cn['silver']}</td><td>Silver — 10 Troy Oz</td><td>10 oz</td><td>${silver_p:.2f}</td><td>26.67 tola</td><td>{get_margin(margins,cn['silver'],0.11,21000)[1]:,}</td><td>{get_margin(margins,cn['silver'],0.11,21000)[0]*100:.2f}%</td></tr>
+      <tr><td>{cn['silver']} ID</td><td>Silver 10 Oz INTRADAY</td><td>10 oz</td><td>${silver_p:.2f}</td><td>26.67 tola</td><td>{get_margin(margins,cn['silver']+"ID",0.055,10500)[1]:,}</td><td>{get_margin(margins,cn['silver']+"ID",0.055,10500)[0]*100:.2f}%</td></tr>
     </tbody>
   </table>
 
-  <div class="specs-section-head">🛢 Crude Oil WTI — Base: CRUDE10 JUL 2026 · ${wti_p:.2f} / BBL</div>
+  <div class="specs-section-head">🛢 Crude Oil WTI — Base: {cn['wti']} · ${wti_p:.2f} / BBL</div>
   <table class="specs-table">
     <thead><tr><th>Contract Code</th><th>Description</th><th>Size</th><th>Price</th><th>Margin (PKR)</th><th>%</th></tr></thead>
     <tbody>
-      <tr><td>CRUDE10 JY26</td><td>WTI Crude Oil — 10 Barrels</td><td>10 bbl</td><td>${wti_p:.2f}</td><td>{get_margin(margins,"CRUDE10 JY26",0.17,43200)[1]:,}</td><td>{get_margin(margins,"CRUDE10 JY26",0.17,43200)[0]*100:.0f}%</td></tr>
-      <tr><td>CRUDE10 JY26 ID</td><td>WTI Crude 10 Bbl INTRADAY</td><td>10 bbl</td><td>${wti_p:.2f}</td><td>{get_margin(margins,"CRUDE10 JY26ID",0.17,43200)[1]:,}</td><td>{get_margin(margins,"CRUDE10 JY26ID",0.17,43200)[0]*100:.0f}%</td></tr>
+      <tr><td>{cn['wti']}</td><td>WTI Crude Oil — 10 Barrels</td><td>10 bbl</td><td>${wti_p:.2f}</td><td>{get_margin(margins,cn['wti'],0.17,43200)[1]:,}</td><td>{get_margin(margins,cn['wti'],0.17,43200)[0]*100:.0f}%</td></tr>
+      <tr><td>{cn['wti']} ID</td><td>WTI Crude 10 Bbl INTRADAY</td><td>10 bbl</td><td>${wti_p:.2f}</td><td>{get_margin(margins,cn['wti']+"ID",0.17,43200)[1]:,}</td><td>{get_margin(margins,cn['wti']+"ID",0.17,43200)[0]*100:.0f}%</td></tr>
     </tbody>
   </table>
 
-  <div class="specs-section-head">⛽ Brent Crude — Base: BRENT10 AUG 2026 · ${brent_p:.2f} / BBL</div>
+  <div class="specs-section-head">⛽ Brent Crude — Base: {cn['brent']} · ${brent_p:.2f} / BBL</div>
   <table class="specs-table" style="margin-bottom:24px;">
     <thead><tr><th>Contract Code</th><th>Description</th><th>Size</th><th>Price</th><th>Margin (PKR)</th><th>%</th></tr></thead>
     <tbody>
-      <tr><td>BRENT10 AU26</td><td>Brent Crude Oil — 10 Barrels</td><td>10 bbl</td><td>${brent_p:.2f}</td><td>{get_margin(margins,"BRENT10 AU26",0.17,44600)[1]:,}</td><td>{get_margin(margins,"BRENT10 AU26",0.17,44600)[0]*100:.0f}%</td></tr>
+      <tr><td>{cn['brent']}</td><td>Brent Crude Oil — 10 Barrels</td><td>10 bbl</td><td>${brent_p:.2f}</td><td>{get_margin(margins,cn['brent'],0.17,44600)[1]:,}</td><td>{get_margin(margins,cn['brent'],0.17,44600)[0]*100:.0f}%</td></tr>
     </tbody>
   </table>
 
