@@ -9,7 +9,7 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 from datetime import datetime, date, timedelta, timezone
-import warnings, base64, re, requests
+import warnings, base64, re, requests, time
 
 warnings.filterwarnings("ignore")
 
@@ -589,18 +589,26 @@ def get_margin(margins, code, default_pct, default_pkr):
     return default_pct, default_pkr
 
 @st.cache_data(ttl=300)
+@st.cache_data(ttl=300)
 def fetch_all():
     data = {}
     errors = []
     for key, ticker in TICKERS.items():
-        try:
-            df = yf.Ticker(ticker).history(period="3mo", interval="1d")
-            if df.empty:
-                errors.append(key)
-                continue
+        df = None
+        for attempt in range(2):
+            try:
+                df = yf.Ticker(ticker).history(period="3mo", interval="1d")
+                if not df.empty:
+                    break
+                df = None
+            except Exception:
+                df = None
+            if attempt == 0:
+                time.sleep(1)
+        if df is not None and not df.empty:
             df.index = pd.to_datetime(df.index)
             data[key] = df
-        except Exception as e:
+        else:
             errors.append(key)
     return data, errors
 
