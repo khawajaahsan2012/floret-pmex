@@ -9,6 +9,10 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 from datetime import datetime, date, timedelta, timezone
+from email.utils import parsedate_to_datetime
+from html import escape as html_escape
+from urllib.parse import quote_plus
+import xml.etree.ElementTree as ET
 import warnings, base64, re, requests, time
 
 warnings.filterwarnings("ignore")
@@ -676,25 +680,78 @@ def _parse_article(a, now_ts):
         return None
     return title, publisher, age_h, url
 
+# Google News RSS search terms per instrument (free, no API key)
+NEWS_QUERIES = {
+    "gold":   "gold price",
+    "silver": "silver price",
+    "wti":    "crude oil price",
+    "brent":  "brent crude",
+    "natgas": "natural gas price",
+    "copper": "copper price",
+    "sp500":  "S&P 500 stocks",
+    "nasdaq": "Nasdaq stocks",
+}
+
+def _google_news(query, now_ts):
+    """Headlines from the last 7 days via Google News RSS, newest first."""
+    UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+    url = ("https://news.google.com/rss/search?q=" + quote_plus(f"{query} when:7d")
+           + "&hl=en-US&gl=US&ceid=US:en")
+    r = requests.get(url, headers={"User-Agent": UA}, timeout=10)
+    r.raise_for_status()
+    items = []
+    for it in ET.fromstring(r.content).findall("./channel/item"):
+        title = (it.findtext("title") or "").strip()
+        publisher = (it.findtext("source") or "").strip()
+        # Google appends " - Publisher" to every title
+        if publisher and title.endswith(" - " + publisher):
+            title = title[: -len(publisher) - 3].strip()
+        try:
+            age_h = (now_ts - parsedate_to_datetime(it.findtext("pubDate")).timestamp()) / 3600
+        except Exception:
+            continue
+        if title and age_h <= 168:
+            items.append({"title": title, "publisher": publisher, "age_hours": age_h,
+                          "url": (it.findtext("link") or "").strip()})
+    items.sort(key=lambda a: a["age_hours"])
+    return items
+
+def _yf_news(ticker, now_ts):
+    """Fallback: yfinance news (Yahoo often returns nothing)."""
+    items = []
+    for a in (yf.Ticker(ticker).news or [])[:12]:
+        parsed = _parse_article(a, now_ts)
+        if parsed:
+            title, publisher, age_h, url = parsed
+            items.append({"title": title, "publisher": publisher, "age_hours": age_h, "url": url})
+    return items
+
 @st.cache_data(ttl=3600)
 def fetch_news():
-    """Fetch recent news headlines for PMEX commodities via yfinance."""
+    """Fetch the 3 most recent headlines per PMEX instrument."""
     news_map = {}
     now_ts = datetime.now().timestamp()
     for key, ticker in NEWS_TICKERS.items():
+        items = []
         try:
-            articles = yf.Ticker(ticker).news or []
-            items = []
-            for a in articles[:12]:
-                parsed = _parse_article(a, now_ts)
-                if parsed:
-                    title, publisher, age_h, url = parsed
-                    items.append({"title": title, "publisher": publisher, "age_hours": age_h, "url": url})
-                if len(items) == 3:
-                    break
-            news_map[key] = items
+            items = _google_news(NEWS_QUERIES[key], now_ts)
         except Exception:
-            news_map[key] = []
+            pass
+        if not items:
+            try:
+                items = _yf_news(ticker, now_ts)
+            except Exception:
+                pass
+        # Drop duplicate headlines (same story syndicated to several outlets)
+        seen, unique = set(), []
+        for a in items:
+            k = a["title"].lower()
+            if k not in seen:
+                seen.add(k)
+                unique.append(a)
+            if len(unique) == 3:
+                break
+        news_map[key] = unique
     return news_map
 
 def get_val(data, key, field="Close"):
@@ -897,17 +954,18 @@ with col_right:
             items = news_map.get(key, [])
             rows = ""
             for a in items:
-                url = a.get("url", "")
+                url = html_escape(a.get("url", ""))
+                title = html_escape(a["title"])
                 title_html = (
                     f'<a href="{url}" target="_blank" rel="noopener" '
                     f'style="color:var(--text);text-decoration:none;font-weight:600;">'
-                    f'{a["title"]}</a>'
+                    f'{title}</a>'
                     if url else
-                    f'<span style="font-weight:600;">{a["title"]}</span>'
+                    f'<span style="font-weight:600;">{title}</span>'
                 )
                 rows += f"""<div style="padding:9px 12px;border-bottom:1px solid var(--grey3);">
                   <div style="font-size:11px;line-height:1.55;margin-bottom:3px;">{title_html}</div>
-                  <div style="font-size:9px;color:var(--muted);letter-spacing:.04em;">{a['publisher']} &nbsp;·&nbsp; {fmt_age(a['age_hours'])}</div>
+                  <div style="font-size:9px;color:var(--muted);letter-spacing:.04em;">{html_escape(a['publisher'])} &nbsp;·&nbsp; {fmt_age(a['age_hours'])}</div>
                 </div>"""
             if not rows:
                 rows = '<div style="padding:14px 12px;font-size:11px;color:var(--muted);text-align:center;">No recent news found.</div>'
